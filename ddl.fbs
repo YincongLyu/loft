@@ -1,0 +1,19 @@
+namespace loft;
+
+table DDL { // 定义表结构
+  check_point: string;  // checkpoint
+  db_name: string;      // which 数据库名
+  ddl_sql: string;      // 具体 SQL 语句
+  ddl_type: string;     // ddl 类型
+  last_commit: long;    // 当前系统中 事务提交进度
+  lsn: long;            // lsn 序列号
+  msg_time: string;     // UCT 时间戳
+  op_type: string;      // {'DDL'，'I'，'U'，'D'}
+  scn: long;          //  全局逻辑事务号
+  seq: long;            // 当前 redo log record 页面编号
+  table_: string;       // 表名
+  tx_seq: long;         // 当前事务号
+  tx_time: string;      // 事务开始时间
+}
+
+root_type DDL; // 根类型

@@ -1,0 +1,75 @@
+namespace loft;
+//=========================================================
+table FieldMeta {
+    data_type: string;
+    length: int;
+    precision: int;
+    is_unsigned: bool = false;
+    nullable: bool = false;
+    csname: string;      // constrant: 需要判断 null
+}
+
+table Field { // 定义 table schema
+  name: string;
+  meta: FieldMeta;
+}
+//=========================================================
+
+enum DataType : byte {
+    None = 0,
+    LongData  = 1,
+    DoubleData = 2,
+    StringData = 3
+}
+
+table LongVal {
+    value: long;
+}
+
+table DoubleVal {
+    value: double;
+}
+
+table StringVal {
+    value: string;
+}
+// union 里的类型必须是表/向量/字符串，不能是基础类型
+union DataMeta {
+ // NoneVal, 暂时不写，让 union 自动生成的 None 代替 NoneVal
+  LongVal,
+  DoubleVal,
+  StringVal
+}
+
+// newData 只存储 k-v
+table kvPair {
+  key: string;
+  value: DataMeta;
+}
+
+table DML { // 定义表结构
+  check_point: string;  // checkpoint
+  db_name: string;      // which 数据库名
+  dn: short;            // machine 节点编号
+  // ddl_sql: string;    不用记录具体的 SQL 语句
+  // ddl_type: string;   不用记录具体的 ’DML‘，因为都可以在 ’opType‘, 'fields', 'keys', ’new_data‘, 'old_ data.bin' 这五个核心信息字段里体现
+
+  fields: [Field];     // <- table fields 的元信息，create table 就固定下来，insert / update / delete 都用它
+  keys: [kvPair];       // <- update / delete 会用到，指定操作的 索引
+
+  last_commit: long;    // 当前系统中 事务提交进度
+  lsn: long;            // lsn 序列号
+  msg_time: string;     // UCT 时间戳
+
+  new_data: [kvPair];     // <- insert / update 会用到
+  old_data: int = 0;     // <- insert / update / delete 都没有使用 old_data？
+
+  op_type: string;      // {'DDL'，'I'，'U'，'D'}
+  scn: long;          //  全局逻辑事务号
+  seq: long;            // 当前 redo log record 页面编号
+  table_: string;       // 表名
+  tx_seq: long;         // 当前事务号
+  tx_time: string;      // 事务开始时间
+}
+
+root_type DML; // 根类型

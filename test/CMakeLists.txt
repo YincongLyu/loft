@@ -12,7 +12,7 @@ foreach(F ${SRC_TEST}) # unit tests
     add_executable(${R} ${F})
 
     # Link with gtest and bloomstore
-    target_link_libraries(${R} gtest gtest_main bloomstore)
+    target_link_libraries(${R} gtest gtest_main loft)
 
     set_target_properties(${R}
         PROPERTIES

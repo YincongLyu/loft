@@ -60,3 +60,6 @@ _deps
 
 # Built Visual Studio Code Extensions
 *.vsix
+
+# script tools 
+format_count.sh

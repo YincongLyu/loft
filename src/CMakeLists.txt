@@ -1,6 +1,7 @@
 file(GLOB_RECURSE SRC ${PROJECT_SOURCE_DIR}/src/*.cpp)
 
-add_library(loft SHARED ${SRC})
+# add_library(loft SHARED ${SRC}) 如果暂时没写 test case，就只能编译成静态库！
+add_library(loft STATIC ${SRC})
 
 # Find Threads package
 find_package(Threads REQUIRED)

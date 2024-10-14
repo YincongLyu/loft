@@ -1,4 +1,5 @@
 #include "file_manager.h"
+#include "ddl_generated.h"
 #include <fstream>
 #include <iostream>
 
@@ -38,5 +39,66 @@ auto LogFormatTransformManager::readSQLN(int nowTestCase
         return {};
     }
 }
+
+auto LogFormatTransformManager::readFileAsBinary(const std::string& filePath)
+    -> std::pair<std::unique_ptr<char[]>, unsigned long long> {
+    // std::ios::ate 定位到文件末尾，以便获取文件大小
+    std::ifstream file(filePath, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open file");
+    }
+
+    // 获取文件大小，使用 unsigned long long 确保足够的容量
+    // file.tellg() 返回类型是 std::streamsize，通常是一个带符号整数类型，具体实现可能为 long 或 long long
+    unsigned long long size = static_cast<unsigned long long>(file.tellg());
+    if (size == 0) {
+        throw std::runtime_error("File is empty");
+    }
+
+    file.seekg(0, std::ios::beg);  // 回到文件开头
+
+    // 分配缓冲区并读取文件内容
+    std::unique_ptr<char[]> buffer(new char[size]);
+    if (!file.read(buffer.get(), size)) {
+        throw std::runtime_error("Failed to read file");
+    }
+
+    // 返回缓冲区和文件大小
+    return {std::move(buffer), size};
+}
+
+void LogFormatTransformManager::transform(const char* data, unsigned long long file_sz) {
+    return;
+}
+
+void LogFormatTransformManager::transformDDL(const DDL* ddl) {
+    assert(std::strcmp(ddl->op_type()->c_str(), "DDL") == 0);
+    
+    std::string ddlType(ddl->ddl_type()->c_str());
+    std::string dbName(ddl->db_name()->c_str());
+
+    // TODO 填充字段
+    // init GTID event + Statement event
+    if (ddlType == "CREATE TABLE") {
+        if (dbName.empty()) {
+            // create db
+            // set dbName = 'mysql';
+        } else {
+            // create table
+        }
+    } else if (ddlType == "DROP TABLE") {
+        // drop table
+    } else if (ddlType.empty()) {  // 处理空字符串的逻辑
+        // drop db
+
+    } else {
+        std::cout << "false ddl type" << std::endl;
+    }
+
+
+
+
+}
+
 
 } // namespace loft

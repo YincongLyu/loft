@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 #include "byteorder.h" // no used!
-// #include "wrapper_functions.h"
+#include "wrapper_functions.h"
 #include <cstring>
 
 namespace binary_log {
@@ -142,7 +142,7 @@ class Event_reader {
 
   void read_str_at_most_255_bytes(const char **destination, uint8_t *length);
 
-  uint64_t net_field_length_ll();
+  // uint64_t net_field_length_ll();
 
   
   void read_data_set(uint32_t set_len, std::list<const char *> *set);

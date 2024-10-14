@@ -74,30 +74,27 @@ void LogFormatTransformManager::transform(const char* data, unsigned long long f
 void LogFormatTransformManager::transformDDL(const DDL* ddl) {
     assert(std::strcmp(ddl->op_type()->c_str(), "DDL") == 0);
     
-    std::string ddlType(ddl->ddl_type()->c_str());
-    std::string dbName(ddl->db_name()->c_str());
+    auto ddlType = ddl->ddl_type();
+    auto dbName = ddl->db_name();
 
     // TODO 填充字段
     // init GTID event + Statement event
-    if (ddlType == "CREATE TABLE") {
-        if (dbName.empty()) {
-            // create db
-            // set dbName = 'mysql';
-        } else {
-            // create table
-        }
-    } else if (ddlType == "DROP TABLE") {
-        // drop table
-    } else if (ddlType.empty()) {  // 处理空字符串的逻辑
-        // drop db
+    if (ddlType == nullptr) { // drop db
 
     } else {
-        std::cout << "false ddl type" << std::endl;
+        std::string sql_type = ddlType->c_str();
+        if (sql_type == "CREATE TABLE") {
+            if (dbName == nullptr) {  // create db
+                // set dbName = 'mysql';
+                std::cout << "create db" << std::endl;
+            } else {  // create table
+
+            }
+        } else if (sql_type == "DROP TABLE") {
+
+        }
     }
-
-
-
-
+ 
 }
 
 

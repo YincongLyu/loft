@@ -22,7 +22,10 @@
 
 #include "event_reader.h"
 #include <string>
+// #include "mysql_com.h"  // net_field_length_ll, net_field_length_size
 
+uint64_t net_field_length_ll(unsigned char **packet);
+unsigned int net_field_length_size(const unsigned char *pos);
 
 namespace binary_log {
 
@@ -133,28 +136,28 @@ void Event_reader::read_str_at_most_255_bytes(const char **destination,
   m_ptr = m_ptr + *lenght;
 }
 
-// uint64_t Event_reader::net_field_length_ll() {
-//   // PRINT_READER_STATUS("Event_reader::net_field_length_ll");
-//   if (!can_read(sizeof(uint8_t))) {
-//     set_error("Cannot read from out of buffer bounds");
-//     return 0;
-//   }
-//   // It is safe to read the first byte of the transaction_length
-//   unsigned char *ptr_length;
-//   ptr_length = reinterpret_cast<unsigned char *>(const_cast<char *>(m_ptr));
-//   unsigned int length_size = net_field_length_size(ptr_length);
-//   BAPI_PRINT("debug", ("Event_reader::read_net_field_length_ll(): "
-//                        "expect to read length with %u byte(s)",
-//                        length_size));
-//   if (!can_read(length_size)) {
-//     set_error("Cannot read from out of buffer bounds");
-//     return 0;
-//   }
-//   // It is safe to read the full transaction_length from the buffer
-//   uint64_t value = net_field_length_ll(&ptr_length);
-//   m_ptr = m_ptr + length_size;
-//   return value;
-// }
+uint64_t Event_reader::net_field_length_ll() {
+  // PRINT_READER_STATUS("Event_reader::net_field_length_ll");
+  if (!can_read(sizeof(uint8_t))) {
+    set_error("Cannot read from out of buffer bounds");
+    return 0;
+  }
+  // It is safe to read the first byte of the transaction_length
+  unsigned char *ptr_length;
+  ptr_length = reinterpret_cast<unsigned char *>(const_cast<char *>(m_ptr));
+  unsigned int length_size = net_field_length_size(ptr_length);
+  BAPI_PRINT("debug", ("Event_reader::read_net_field_length_ll(): "
+                       "expect to read length with %u byte(s)",
+                       length_size));
+  if (!can_read(length_size)) {
+    set_error("Cannot read from out of buffer bounds");
+    return 0;
+  }
+  // It is safe to read the full transaction_length from the buffer
+  uint64_t value = ::net_field_length_ll(&ptr_length);
+  m_ptr = m_ptr + length_size;
+  return value;
+}
 
 void Event_reader::read_data_set(uint32_t set_len,
                                  std::list<const char *> *set) {

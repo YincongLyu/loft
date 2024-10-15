@@ -1,5 +1,6 @@
 #include "file_manager.h"
 #include "ddl_generated.h"
+#include "control_events.h"
 #include <fstream>
 #include <iostream>
 
@@ -79,6 +80,8 @@ void LogFormatTransformManager::transformDDL(const DDL* ddl) {
 
     // TODO 填充字段
     // init GTID event + Statement event
+
+    // auto gtid_event = new binary_log::Gtid_event();
     if (ddlType == nullptr) { // drop db
 
     } else {

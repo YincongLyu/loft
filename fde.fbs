@@ -1,0 +1,11 @@
+namespace binlog_events;
+
+table FormatDescriptionEvent {
+    binlog_version: ushort;          // 对应 uint16_t
+    server_version: [ubyte];  // 对应 char server_version_[ST_SERVER_VER_LEN]
+    create_timestamp: ulong;         // 对应 time_t
+    common_header_len: byte;         // 对应 uint8_t
+    post_header_len: [ubyte];        // 对应 std::vector<uint8_t>
+}
+
+root_type FormatDescriptionEvent;

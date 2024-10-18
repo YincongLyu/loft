@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.18)
 
 # -- Configure project compiler options
-project(bloomstore LANGUAGES C CXX)
+project(loft LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS true)
@@ -38,7 +38,6 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # -- Includes
 include_directories(${PROJECT_SOURCE_DIR}/include)
-include_directories(${PROJECT_SOURCE_DIR}/include/binlogevents)
 
 # Add subdirectory for source
 add_subdirectory(src)

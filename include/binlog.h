@@ -35,6 +35,11 @@ class TC_LOG {
 
 // 暂时不考虑 index 文件、lock
 class MYSQL_BIN_LOG : TC_LOG {
+
+  public:
+    explicit MYSQL_BIN_LOG(Basic_ostream* ostream) : m_binlog_file_(dynamic_cast<Binlog_ofile *>(ostream)) {}
+    ~MYSQL_BIN_LOG() override = default;
+
   private:
     enum enum_log_state_ { LOG_OPENED, LOG_CLOSED, LOG_TO_BE_OPENED };
 

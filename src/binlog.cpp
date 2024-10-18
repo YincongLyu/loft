@@ -78,9 +78,9 @@ void MYSQL_BIN_LOG::close() {
 }
 
 bool MYSQL_BIN_LOG::write_event_to_binlog(AbstractEvent *ev) {
-
-    return false;
+    return ev->write(this->m_binlog_file_);
 }
 void MYSQL_BIN_LOG::update_binlog_end_pos(const char *file, loft::my_off_t pos) {
+    // TODO
     return;
 }

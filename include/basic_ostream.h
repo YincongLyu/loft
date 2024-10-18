@@ -22,6 +22,7 @@ class Basic_ostream {
     virtual bool seek(loft::my_off_t position) = 0;
     virtual bool sync() = 0;
     virtual bool flush() = 0;
+    virtual loft::my_off_t get_position() = 0;
 
     virtual ~Basic_ostream() = default;
 };
@@ -58,9 +59,10 @@ class Binlog_ofile : public Basic_ostream {
     bool seek(loft::my_off_t position) override;
     bool sync() override;
     bool flush() override;
+    loft::my_off_t get_position() override { return m_position_; };
 
     // Helper functions
-    loft::my_off_t position() const { return m_position_; }
+
 
     std::fstream &get_pipeline_head() { return *m_pipeline_head_; }
 

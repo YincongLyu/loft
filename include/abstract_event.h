@@ -118,19 +118,14 @@ class AbstractEvent;
 
 class EventCommonHeader {
   public:
-    explicit EventCommonHeader(Log_event_type type_code_arg = ENUM_END_EVENT, AbstractEvent* event = nullptr)
+    explicit EventCommonHeader(Log_event_type type_code_arg = ENUM_END_EVENT)
         : type_code_(type_code_arg)
-        , data_written_(0)
+        , data_written_(0) // 不计算出来，mysqlbinlog 验证不通过
         , log_pos_(0)
-        , flags_(0) {
+        , flags_(0) { // 默认正常关闭
         when_.tv_sec = 0;
         when_.tv_usec = 0;
-
-        event_ = event;
     }
-
-    uint32_t write_common_header_to_memory(uchar *buf);
-    bool write(Basic_ostream *ostream, size_t data_length);
 
   public:
     struct timeval when_{};
@@ -140,8 +135,6 @@ class EventCommonHeader {
     unsigned long long log_pos_;
     uint16_t flags_;
 
-  public:
-    AbstractEvent *event_;
 
 };
 
@@ -152,7 +145,6 @@ class EventCommonFooter {
     explicit EventCommonFooter(enum_binlog_checksum_alg checksum_alg_arg)
         : checksum_alg_(checksum_alg_arg) {}
 
-    bool write(Basic_ostream *ostream);
 
   public:
     enum_binlog_checksum_alg checksum_alg_;
@@ -210,19 +202,18 @@ class AbstractEvent {
     AbstractEvent &operator=(const AbstractEvent &) = default;
     AbstractEvent &operator=(AbstractEvent &&) = default;
 
+    uint32_t write_common_header_to_memory(uchar *buf);
+    bool write_common_header(Basic_ostream *ostream, size_t event_data_length);
+    bool write_common_footer(Basic_ostream *ostream);
 
-    virtual bool write_common_header(Basic_ostream *ostream, size_t data_length) = 0;
-    virtual bool write_event(Basic_ostream *ostream) = 0;
-    virtual bool write_common_footer(Basic_ostream *ostream) = 0;
-
-    bool write(Basic_ostream *ostream);
+    virtual bool write(Basic_ostream *ostream) = 0;
 
   public:
     EventCommonHeader* common_header_;
     EventCommonFooter* common_footer_;
 
     enum Log_event_type type_code_ = UNKNOWN_EVENT;
-    uint32_t server_id_ = 1000;
+    uint32_t server_id_ = 1000; // 配置项读入
 };
 
 #endif // LOFT_ABSTRACT_EVENT_H

@@ -2,6 +2,7 @@
 #include "little_endian.h"
 #include <iostream>
 
+// 在每个构造函数里，并没有实例化 common_header_ 和 common_footer_ 成员变量
 Format_description_event::Format_description_event(
     uint8_t binlog_ver, const char *server_ver
 )
@@ -69,23 +70,22 @@ Format_description_event::Format_description_event(
     } else { /* Includes binlog version < 4 */
     }
 
+    // AbstarctEvent 在写 common_header 时，会使用成员变量 type_code_，故先不填充没事
+    this->common_header_ = new EventCommonHeader();
+    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+
 }
 
 Format_description_event::~Format_description_event() = default;
 
-// write common header 在设计时有个问题，要先留出 common-header 的空间，先写 event 本身，才可以填 data_written_ 和 log_pos_
-// 目前先 顺序写
-bool Format_description_event::write_common_header(Basic_ostream *ostream, size_t data_length) {
-    common_header_ = new EventCommonHeader(get_type_code(), this);
-    return this->common_header_->write(ostream, data_length);
-}
 
 // 只负责写 event-data：包括 post-header 和 event-body
-bool Format_description_event::write_event(Basic_ostream *ostream) {
+bool Format_description_event::write(Basic_ostream *ostream) {
     // TODO 暂时写固定数据，先确定要写 哪些字段
 
     // fde 只有 post-header
-    uchar buff[AbstractEvent::FORMAT_DESCRIPTION_HEADER_LEN];
+    size_t rec_size = AbstractEvent::FORMAT_DESCRIPTION_HEADER_LEN;
+    uchar buff[rec_size];
 
     int2store(buff + ST_BINLOG_VER_OFFSET, binlog_version_);
     memcpy((char *)buff + ST_SERVER_VER_OFFSET, server_version_,
@@ -99,13 +99,8 @@ bool Format_description_event::write_event(Basic_ostream *ostream) {
     memcpy((char *)buff + ST_COMMON_HEADER_LEN_OFFSET + 1,
            &post_header_len_.front(), number_of_events);
 
+  return write_common_header(ostream, rec_size) &&
+           ostream->write(buff, rec_size) &&
+           write_common_footer(ostream);
 
-  return ostream->write(buff, sizeof (buff));
-
-}
-
-bool Format_description_event::write_common_footer(Basic_ostream *ostream) {
-    // footer  根据 当前外设的 algo 构造出来, 先默认是  BINLOG_CHECKSUM_ALG_OFF
-    common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
-    return this->common_footer_->write(ostream);
 }

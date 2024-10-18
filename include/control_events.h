@@ -41,9 +41,7 @@ class Format_description_event : public AbstractEvent {
 
     ~Format_description_event() override;
 
-    bool write_common_header(Basic_ostream *ostream, size_t data_length) override;
-    bool write_event(Basic_ostream *ostream) override;
-    bool write_common_footer(Basic_ostream *ostream) override;
+    bool write(Basic_ostream *ostream) override;
 
 
 };

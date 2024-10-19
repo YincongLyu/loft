@@ -206,7 +206,36 @@ class AbstractEvent {
     bool write_common_header(Basic_ostream *ostream, size_t event_data_length);
     bool write_common_footer(Basic_ostream *ostream);
 
-    virtual bool write(Basic_ostream *ostream) = 0;
+    /*
+        - 对于复杂的 event，event_data_size 在 实现 具体的 write() 时 计算
+            - Format_description_event
+        - 对于简单的 event，可以调用 event_data_size()
+            - Rows_log_event::get_data_size()
+    */
+    virtual size_t get_data_size() { return 0; }
+
+//    virtual bool write(Basic_ostream *ostream) = 0;
+
+    virtual bool write(Basic_ostream *ostream) {
+        return (write_common_header(ostream, get_data_size()) &&
+                write_data_header(ostream) && write_data_body(ostream) &&
+                write_common_footer(ostream));
+    }
+    /*
+        - Rows_log_event
+        - Table_map_log_event
+        - Gtid_log_event
+     */
+    virtual bool write_data_header(Basic_ostream *) { return true; }
+
+    /*
+        - Rows_log_event
+        - Table_map_log_event
+        - Previous_gtids_log_event
+        - Gtid_log_event
+     */
+
+    virtual bool write_data_body(Basic_ostream *) { return true; }
 
   public:
     EventCommonHeader* common_header_;

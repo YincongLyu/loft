@@ -41,6 +41,10 @@ class Format_description_event : public AbstractEvent {
 
     ~Format_description_event() override;
 
+    // ********* impl virtual function *********************
+    size_t get_data_size() override {
+        return AbstractEvent::FORMAT_DESCRIPTION_HEADER_LEN;
+    }
     bool write(Basic_ostream *ostream) override;
 
 
@@ -60,11 +64,36 @@ class Format_description_event : public AbstractEvent {
 
 class Previous_gtids_event : public AbstractEvent {
   public:
-    Previous_gtids_event() : AbstractEvent(PREVIOUS_GTIDS_LOG_EVENT) {}
+    /**
+        Constructor
+     */
+    Previous_gtids_event();
+    // TODO add class Gtid_set
+//    Previous_gtids_event(const Gtid_set *set);
+
+    /**
+        Deconstructor
+     */
+    ~Previous_gtids_event() override;
+
+    const uchar *get_buf() { return buf_; }
+    /**
+      格式化输出 prev gtid set 信息
+    */
+//    char *get_str(size_t *length, const Gtid_set::String_format *string_format) const;
+    // Add all GTIDs from this event to the given Gtid_set.
+//    int add_to_set(Gtid_set *gtid_set) const;
+
+    size_t get_encoded_length() const;
+
+    // ********* impl virtual function *********************
+    size_t get_data_size() override { return buf_size_; }
+    bool write(Basic_ostream *ostream) override;
+    bool write_data_body(Basic_ostream *ostream) override;
 
   protected:
-    size_t buf_size;
-    const unsigned char *buf;
+    size_t buf_size_;
+    const uchar *buf_;
 };
 
 /*

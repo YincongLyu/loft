@@ -43,10 +43,13 @@ bool AbstractEvent::write_common_header(
 
     write_common_header_to_memory(header);
 
+    std::cout << "current event common-header write pos: " << ostream->get_position() << std::endl;
     return ostream->write(header, LOG_EVENT_HEADER_LEN);
 }
 
 bool AbstractEvent::write_common_footer(Basic_ostream *ostream) {
+    std::cout << "current event checksum write pos: " << ostream->get_position() << std::endl;
+
     uchar buf[BINLOG_CHECKSUM_LEN];
     int4store(buf, 0);
     return ostream->write(buf, sizeof(buf));

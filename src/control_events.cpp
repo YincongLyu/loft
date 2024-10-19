@@ -104,3 +104,34 @@ bool Format_description_event::write(Basic_ostream *ostream) {
            write_common_footer(ostream);
 
 }
+
+Previous_gtids_event::Previous_gtids_event() : AbstractEvent(PREVIOUS_GTIDS_LOG_EVENT) {
+    // TODO 后续根据 gtid_set 大小改造
+    buf_size_ = 8;
+    buf_ = static_cast<const uchar *>(malloc(sizeof(uchar) * buf_size_));
+    memset((void *)buf_, 0, buf_size_);
+//    buf_size_ = set->get_encoded_length();
+//    uchar *buffer =(uchar *)malloc( (sizeof(uchar) * buf_size_));
+//    set->encode(buffer);
+//    register_temp_buf((char *)buffer);
+//    buf_ = buffer;
+
+    this->common_header_ = new EventCommonHeader();
+    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+}
+
+
+bool Previous_gtids_event::write(Basic_ostream *ostream) {
+    // 无 post-header
+    return write_common_header(ostream, get_data_size()) &&
+           write_data_body(ostream) &&
+            write_common_footer(ostream);
+}
+
+bool Previous_gtids_event::write_data_body(Basic_ostream *ostream) {
+    std::cout << "current event data_body write pos: " << ostream->get_position() << std::endl;
+
+    return ostream -> write(buf_, buf_size_);
+}
+
+Previous_gtids_event::~Previous_gtids_event() = default;

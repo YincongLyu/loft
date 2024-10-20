@@ -2,6 +2,10 @@
 #include "little_endian.h"
 #include <iostream>
 
+/**************************************************************************
+        Format_description_event methods
+**************************************************************************/
+
 // 在每个构造函数里，并没有实例化 common_header_ 和 common_footer_ 成员变量
 Format_description_event::Format_description_event(
     uint8_t binlog_ver, const char *server_ver
@@ -70,14 +74,13 @@ Format_description_event::Format_description_event(
     } else { /* Includes binlog version < 4 */
     }
 
-    // AbstarctEvent 在写 common_header 时，会使用成员变量 type_code_，故先不填充没事
+    // AbstarctEvent 在写 common_header 时，会使用成员变量
+    // type_code_，故先不填充没事
     this->common_header_ = new EventCommonHeader();
     this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
-
 }
 
 Format_description_event::~Format_description_event() = default;
-
 
 // 只负责写 event-data：包括 post-header 和 event-body
 bool Format_description_event::write(Basic_ostream *ostream) {
@@ -88,50 +91,197 @@ bool Format_description_event::write(Basic_ostream *ostream) {
     uchar buff[rec_size];
 
     int2store(buff + ST_BINLOG_VER_OFFSET, binlog_version_);
-    memcpy((char *)buff + ST_SERVER_VER_OFFSET, server_version_,
-           ST_SERVER_VER_LEN);
+    memcpy(
+        (char *)buff + ST_SERVER_VER_OFFSET, server_version_, ST_SERVER_VER_LEN
+    );
     create_timestamp_ = get_time();
-    int4store(buff + ST_CREATED_OFFSET, static_cast<uint32_t>(create_timestamp_));
+    int4store(
+        buff + ST_CREATED_OFFSET, static_cast<uint32_t>(create_timestamp_)
+    );
     buff[ST_COMMON_HEADER_LEN_OFFSET] = LOG_EVENT_HEADER_LEN; // store 1 byte
 
     size_t number_of_events = static_cast<int>(post_header_len_.size());
 
-    memcpy((char *)buff + ST_COMMON_HEADER_LEN_OFFSET + 1,
-           &post_header_len_.front(), number_of_events);
+    memcpy(
+        (char *)buff + ST_COMMON_HEADER_LEN_OFFSET + 1,
+        &post_header_len_.front(), number_of_events
+    );
 
-  return write_common_header(ostream, rec_size) &&
-           ostream->write(buff, rec_size) &&
-           write_common_footer(ostream);
-
+    return write_common_header(ostream, rec_size)
+           && ostream->write(buff, rec_size) && write_common_footer(ostream);
 }
 
-Previous_gtids_event::Previous_gtids_event() : AbstractEvent(PREVIOUS_GTIDS_LOG_EVENT) {
+/**************************************************************************
+        Previous_gtids_event methods
+**************************************************************************/
+
+Previous_gtids_event::Previous_gtids_event(const Gtid_set *set)
+    : AbstractEvent(PREVIOUS_GTIDS_LOG_EVENT) {
     // TODO 后续根据 gtid_set 大小改造
-    buf_size_ = 8;
-    buf_ = static_cast<const uchar *>(malloc(sizeof(uchar) * buf_size_));
-    memset((void *)buf_, 0, buf_size_);
-//    buf_size_ = set->get_encoded_length();
-//    uchar *buffer =(uchar *)malloc( (sizeof(uchar) * buf_size_));
-//    set->encode(buffer);
-//    register_temp_buf((char *)buffer);
-//    buf_ = buffer;
+
+    buf_size_ = set->get_encoded_length(); // 固定为 8
+    uchar *buffer = (uchar *)malloc((sizeof(uchar) * buf_size_));
+    set->encode(buffer);
+    buf_ = buffer;
 
     this->common_header_ = new EventCommonHeader();
     this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
-
 bool Previous_gtids_event::write(Basic_ostream *ostream) {
     // 无 post-header
-    return write_common_header(ostream, get_data_size()) &&
-           write_data_body(ostream) &&
-            write_common_footer(ostream);
+    return write_common_header(ostream, get_data_size())
+           && write_data_body(ostream) && write_common_footer(ostream);
 }
 
 bool Previous_gtids_event::write_data_body(Basic_ostream *ostream) {
-    std::cout << "current event data_body write pos: " << ostream->get_position() << std::endl;
+    std::cout << "current event data_body write pos: "
+              << ostream->get_position() << std::endl;
 
-    return ostream -> write(buf_, buf_size_);
+    return ostream->write(buf_, buf_size_);
 }
 
 Previous_gtids_event::~Previous_gtids_event() = default;
+
+/**************************************************************************
+        Gtid_event methods
+**************************************************************************/
+
+Gtid_event::Gtid_event(
+    long long int last_committed_arg,
+    long long int sequence_number_arg,
+    bool may_have_sbr_stmts_arg,
+    unsigned long long int original_commit_timestamp_arg,
+    unsigned long long int immediate_commit_timestamp_arg,
+    uint32_t original_server_version_arg,
+    uint32_t immediate_server_version_arg
+)
+    : AbstractEvent(GTID_LOG_EVENT)
+    , last_committed_(last_committed_arg)
+    , sequence_number_(sequence_number_arg)
+    , may_have_sbr_stmts_(may_have_sbr_stmts_arg)
+    , original_commit_timestamp_(original_commit_timestamp_arg)
+    , immediate_commit_timestamp_(immediate_commit_timestamp_arg)
+    , transaction_length_(0)
+    , original_server_version_(original_server_version_arg)
+    , immediate_server_version_(immediate_server_version_arg) {
+    // 默认当前 txn 是 Anonymous
+    spec_.set_anonymous();
+    spec_.gtid_.clear();
+    sid_.clear();
+
+    this->common_header_ = new EventCommonHeader();
+    Log_event_type event_type =
+        (spec_.type_ == ANONYMOUS_GTID
+             ? Log_event_type::ANONYMOUS_GTID_LOG_EVENT
+             : Log_event_type::GTID_LOG_EVENT);
+    this->type_code_ = event_type;
+
+    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+}
+
+size_t Gtid_event::get_data_size() {
+    // 默认 txn_length = 0, 省略 net_length_size(transaction_length) 大小
+    // 只有考虑 commit_group_ticket 参数，才会计算 txn_length
+    return POST_HEADER_LENGTH + get_commit_timestamp_length()
+           + get_server_version_length();
+}
+
+uint32_t Gtid_event::write_post_header_to_memory(uchar *buffer) {
+    uchar *ptr_buffer = buffer;
+
+    /* Encode the GTID flags */
+    uchar gtid_flags = 0;
+    gtid_flags |= may_have_sbr_stmts_ ? Gtid_event::FLAG_MAY_HAVE_SBR : 0;
+    *ptr_buffer = gtid_flags;
+    ptr_buffer += ENCODED_FLAG_LENGTH;
+
+    sid_.copy_to(ptr_buffer);
+    ptr_buffer += ENCODED_SID_LENGTH;
+
+    int8store(ptr_buffer, spec_.gtid_.gno_);
+    ptr_buffer += ENCODED_GNO_LENGTH;
+
+    *ptr_buffer = LOGICAL_TIMESTAMP_TYPECODE;
+    ptr_buffer += LOGICAL_TIMESTAMP_TYPECODE_LENGTH;
+
+    int8store(ptr_buffer, last_committed_);
+    int8store(ptr_buffer + 8, sequence_number_);
+    ptr_buffer += LOGICAL_TIMESTAMP_LENGTH;
+
+    assert(ptr_buffer == (buffer + POST_HEADER_LENGTH));
+
+    return POST_HEADER_LENGTH;
+}
+
+bool Gtid_event::write_data_header(Basic_ostream *ostream) {
+    uchar buffer[POST_HEADER_LENGTH];
+    write_post_header_to_memory(buffer);
+    return ostream->write((uchar *)buffer, POST_HEADER_LENGTH);
+}
+
+// FULL_COMMIT_TIMESTAMP_LENGTH + 0 + FULL_SERVER_VERSION_LENGTH + 0
+uint32_t Gtid_event::write_body_to_memory(uchar *buffer) {
+    uchar *ptr_buffer = buffer;
+
+    unsigned long long immediate_commit_timestamp_with_flag =
+        immediate_commit_timestamp_;
+
+    if (immediate_commit_timestamp_ != original_commit_timestamp_) {
+        immediate_commit_timestamp_with_flag |=
+            (1ULL << ENCODED_COMMIT_TIMESTAMP_LENGTH);
+    } else { // Clear highest bit(MSB)
+        immediate_commit_timestamp_with_flag &=
+            ~(1ULL << ENCODED_COMMIT_TIMESTAMP_LENGTH);
+    }
+
+    int7store(ptr_buffer, immediate_commit_timestamp_with_flag);
+    ptr_buffer += IMMEDIATE_COMMIT_TIMESTAMP_LENGTH;
+
+    if (immediate_commit_timestamp_ != original_commit_timestamp_) {
+        int7store(ptr_buffer, original_commit_timestamp_);
+        ptr_buffer += ORIGINAL_COMMIT_TIMESTAMP_LENGTH;
+    }
+
+    // Write the transaction length information
+    uchar *ptr_after_length = net_store_length(ptr_buffer, transaction_length_);
+    ptr_buffer = ptr_after_length;
+
+    uint32_t immediate_server_version_with_flag = immediate_server_version_;
+
+    if (immediate_server_version_ != original_server_version_) {
+        immediate_server_version_with_flag |=
+            (1ULL << ENCODED_SERVER_VERSION_LENGTH);
+    } else { // Clear MSB
+        immediate_server_version_with_flag &=
+            ~(1ULL << ENCODED_SERVER_VERSION_LENGTH);
+    }
+
+    int4store(ptr_buffer, immediate_server_version_with_flag);
+    ptr_buffer += IMMEDIATE_SERVER_VERSION_LENGTH;
+
+    if (immediate_server_version_ != original_server_version_) {
+        int4store(ptr_buffer, original_server_version_);
+        ptr_buffer += ORIGINAL_SERVER_VERSION_LENGTH;
+    }
+
+    // 无外设 commit_group_ticket，故默认和 kTicketUnset 一致，不用算空间
+
+    //    if (this->commit_group_ticket != binlog::BgcTicket::kTicketUnset) {
+    //        int8store(ptr_buffer, this->commit_group_ticket);
+    //        ptr_buffer += COMMIT_GROUP_TICKET_LENGTH;
+    //    }
+    return ptr_buffer - buffer;
+}
+
+bool Gtid_event::write_data_body(Basic_ostream *ostream) {
+    uchar buffer[MAX_DATA_LENGTH];
+    uint32_t len = write_body_to_memory(buffer);
+    return ostream->write((uchar *)buffer, len);
+}
+
+bool Gtid_event::write(Basic_ostream *ostream) {
+    return AbstractEvent::write(ostream);
+}
+
+Gtid_event::~Gtid_event() = default;

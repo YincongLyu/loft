@@ -1,13 +1,13 @@
 // constants.h
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
+#include <bits/types.h>
 #include <cassert>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <unistd.h>
-#include <bits/types.h>
 
 namespace loft {
 
@@ -22,7 +22,6 @@ using uint64_t = __uint64_t;
 
 using my_off_t = unsigned long long;
 using uchar = unsigned char;
-
 
 typedef int File; /* File descriptor */
 
@@ -46,9 +45,9 @@ constexpr const size_t IO_SIZE{4096};
 #define BINLOG_CHECKSUM_LEN 4
 
 /** start event post-header (for v3 and v4) */
-#define ST_BINLOG_VER_OFFSET 0
-#define ST_SERVER_VER_OFFSET 2
-#define ST_CREATED_OFFSET (ST_SERVER_VER_OFFSET + ST_SERVER_VER_LEN)
+#define ST_BINLOG_VER_OFFSET        0
+#define ST_SERVER_VER_OFFSET        2
+#define ST_CREATED_OFFSET           (ST_SERVER_VER_OFFSET + ST_SERVER_VER_LEN)
 #define ST_COMMON_HEADER_LEN_OFFSET (ST_CREATED_OFFSET + 4)
 /**
     event common-header offset

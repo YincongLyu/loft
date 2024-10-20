@@ -29,9 +29,7 @@ class Basic_ostream {
 
 class Binlog_ofile : public Basic_ostream {
   public:
-    ~Binlog_ofile() override {
-        close();
-    }
+    ~Binlog_ofile() override { close(); }
 
     void close() {
         if (m_pipeline_head_) {
@@ -59,10 +57,10 @@ class Binlog_ofile : public Basic_ostream {
     bool seek(loft::my_off_t position) override;
     bool sync() override;
     bool flush() override;
+
     loft::my_off_t get_position() override { return m_position_; };
 
     // Helper functions
-
 
     std::fstream &get_pipeline_head() { return *m_pipeline_head_; }
 

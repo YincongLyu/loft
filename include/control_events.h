@@ -6,6 +6,7 @@
 #define LOFT_CONTROL_EVENTS_H
 
 #include "abstract_event.h"
+#include "rpl_gtid.h"
 #include <cstring>
 #include <vector>
 
@@ -45,9 +46,8 @@ class Format_description_event : public AbstractEvent {
     size_t get_data_size() override {
         return AbstractEvent::FORMAT_DESCRIPTION_HEADER_LEN;
     }
+
     bool write(Basic_ostream *ostream) override;
-
-
 };
 
 /*
@@ -67,9 +67,9 @@ class Previous_gtids_event : public AbstractEvent {
     /**
         Constructor
      */
-    Previous_gtids_event();
+//    Previous_gtids_event();
     // TODO add class Gtid_set
-//    Previous_gtids_event(const Gtid_set *set);
+    Previous_gtids_event(const Gtid_set *set);
 
     /**
         Deconstructor
@@ -77,17 +77,20 @@ class Previous_gtids_event : public AbstractEvent {
     ~Previous_gtids_event() override;
 
     const uchar *get_buf() { return buf_; }
+
     /**
       格式化输出 prev gtid set 信息
     */
-//    char *get_str(size_t *length, const Gtid_set::String_format *string_format) const;
+    //    char *get_str(size_t *length, const Gtid_set::String_format
+    //    *string_format) const;
     // Add all GTIDs from this event to the given Gtid_set.
-//    int add_to_set(Gtid_set *gtid_set) const;
+    //    int add_to_set(Gtid_set *gtid_set) const;
 
     size_t get_encoded_length() const;
 
     // ********* impl virtual function *********************
     size_t get_data_size() override { return buf_size_; }
+
     bool write(Basic_ostream *ostream) override;
     bool write_data_body(Basic_ostream *ostream) override;
 
@@ -116,26 +119,30 @@ struct gtid_info {
 
 class Gtid_event : public AbstractEvent {
   public:
-    long long int last_committed;
-    long long int sequence_number;
+    long long int last_committed_;
+    long long int sequence_number_;
     /** GTID flags constants */
     const unsigned char FLAG_MAY_HAVE_SBR = 1;
     /** Transaction might have changes logged with SBR */
-    bool may_have_sbr_stmts;
+    bool may_have_sbr_stmts_;
     /** Timestamp when the transaction was committed on the originating master.
      */
-    unsigned long long int original_commit_timestamp;
+    unsigned long long int original_commit_timestamp_;
     /** Timestamp when the transaction was committed on the nearest master. */
-    unsigned long long int immediate_commit_timestamp;
-    bool has_commit_timestamps;
+    unsigned long long int immediate_commit_timestamp_;
+    bool has_commit_timestamps{};
     /** The length of the transaction in bytes. */
-    unsigned long long int transaction_length;
+    unsigned long long int transaction_length_;
+
+    Gtid_specification spec_;
+    /// SID for this GTID.
+    rpl_sid sid_;
 
   public:
     /**
       Constructor.
     */
-    explicit Gtid_event(
+    Gtid_event(
         long long int last_committed_arg,
         long long int sequence_number_arg,
         bool may_have_sbr_stmts_arg,
@@ -143,27 +150,36 @@ class Gtid_event : public AbstractEvent {
         unsigned long long int immediate_commit_timestamp_arg,
         uint32_t original_server_version_arg,
         uint32_t immediate_server_version_arg
-    )
-        : AbstractEvent(GTID_LOG_EVENT)
-        , last_committed(last_committed_arg)
-        , sequence_number(sequence_number_arg)
-        , may_have_sbr_stmts(may_have_sbr_stmts_arg)
-        , original_commit_timestamp(original_commit_timestamp_arg)
-        , immediate_commit_timestamp(immediate_commit_timestamp_arg)
-        , transaction_length(0)
-        , original_server_version(original_server_version_arg)
-        , immediate_server_version(immediate_server_version_arg) {}
+    );
+
+    ~Gtid_event() override;
+
+    // ********* impl virtual function *********************
+    size_t get_data_size() override;
+    bool write(Basic_ostream *ostream) override;
+    bool write_data_header(Basic_ostream *ostream) override;
+    bool write_data_body(Basic_ostream *ostream) override;
+
+    /**
+      固定长度：Gtid_log_event::POST_HEADER_LENGTH.
+    */
+    uint32_t write_post_header_to_memory(uchar *buffer);
+
+    /**
+      @return The number of bytes written, i.e.,
+              If the transaction did not originated on this server
+                Gtid_event::IMMEDIATE_COMMIT_TIMESTAMP_LENGTH.
+              else
+                FULL_COMMIT_TIMESTAMP_LENGTH.
+    */
+    uint32_t write_body_to_memory(uchar *buffer);
 
     /*
-      Commit group ticket consists of: 1st bit, used internally for
-      synchronization purposes ("is in use"),  followed by 63 bits for
-      the ticket value.
+       第一个 bit 表示是否 启用 sync
+       后 63 bit 表示 ticket value
     */
     static constexpr int COMMIT_GROUP_TICKET_LENGTH = 8;
-    /*
-      Default value of commit_group_ticket, which means it is not
-      being used.
-    */
+
     static constexpr std::uint64_t kGroupTicketUnset = 0;
 
   protected:
@@ -199,7 +215,7 @@ class Gtid_event : public AbstractEvent {
 
     /* We have only original commit timestamp if both timestamps are equal. */
     int get_commit_timestamp_length() const {
-        if (original_commit_timestamp != immediate_commit_timestamp) {
+        if (original_commit_timestamp_ != immediate_commit_timestamp_) {
             return FULL_COMMIT_TIMESTAMP_LENGTH;
         }
         return ORIGINAL_COMMIT_TIMESTAMP_LENGTH;
@@ -210,13 +226,13 @@ class Gtid_event : public AbstractEvent {
       same.
     */
     int get_server_version_length() const {
-        if (original_server_version != immediate_server_version) {
+        if (original_server_version_ != immediate_server_version_) {
             return FULL_SERVER_VERSION_LENGTH;
         }
         return IMMEDIATE_SERVER_VERSION_LENGTH;
     }
 
-    gtid_info gtid_info_struct;
+    gtid_info gtid_info_struct{};
     //    Uuid Uuid_parent_struct;
 
     /* Minimum GNO expected in a serialized GTID event */
@@ -259,36 +275,14 @@ class Gtid_event : public AbstractEvent {
       @param transaction_length_arg The transaction length.
     */
     void set_trx_length(unsigned long long int transaction_length_arg) {
-        transaction_length = transaction_length_arg;
+        transaction_length_ = transaction_length_arg;
     }
 
     /** The version of the server where the transaction was originally executed
      */
-    uint32_t original_server_version;
+    uint32_t original_server_version_;
     /** The version of the immediate server */
-    uint32_t immediate_server_version;
-
-    /** Ticket number used to group sessions together during the BGC. */
-    std::uint64_t commit_group_ticket{kGroupTicketUnset};
-
-    /**
-      Returns the length of the packed `commit_group_ticket` field. It may be
-      8 bytes or 0 bytes, depending on whether or not the value is
-      instantiated.
-
-      @return The length of the packed `commit_group_ticket` field
-    */
-    int get_commit_group_ticket_length() const;
-
-    /**
-     Set the commit_group_ticket and update the transaction length if
-     needed, that is, if the commit_group_ticket was not set already
-     account it on the transaction size.
-
-     @param value The commit_group_ticket value.
-    */
-    void
-    set_commit_group_ticket_and_update_transaction_length(std::uint64_t value);
+    uint32_t immediate_server_version_;
 };
 
 /*

@@ -134,8 +134,6 @@ class EventCommonHeader {
     size_t data_written_;
     unsigned long long log_pos_;
     uint16_t flags_;
-
-
 };
 
 class EventCommonFooter {
@@ -144,7 +142,6 @@ class EventCommonFooter {
 
     explicit EventCommonFooter(enum_binlog_checksum_alg checksum_alg_arg)
         : checksum_alg_(checksum_alg_arg) {}
-
 
   public:
     enum_binlog_checksum_alg checksum_alg_;
@@ -188,11 +185,10 @@ class AbstractEvent {
         TRANSACTION_PAYLOAD_HEADER_LEN = 0,
     }; // end enum_post_header_length
 
-    explicit AbstractEvent(Log_event_type type_code) {
-        type_code_ = type_code;
-    }
+    explicit AbstractEvent(Log_event_type type_code) { type_code_ = type_code; }
 
     enum Log_event_type get_type_code() { return type_code_; }
+
     unsigned long get_time();
 
     virtual ~AbstractEvent() = 0;
@@ -214,13 +210,16 @@ class AbstractEvent {
     */
     virtual size_t get_data_size() { return 0; }
 
-//    virtual bool write(Basic_ostream *ostream) = 0;
+    //    virtual bool write(Basic_ostream *ostream) = 0;
 
     virtual bool write(Basic_ostream *ostream) {
-        return (write_common_header(ostream, get_data_size()) &&
-                write_data_header(ostream) && write_data_body(ostream) &&
-                write_common_footer(ostream));
+        return (
+            write_common_header(ostream, get_data_size())
+            && write_data_header(ostream) && write_data_body(ostream)
+            && write_common_footer(ostream)
+        );
     }
+
     /*
         - Rows_log_event
         - Table_map_log_event
@@ -238,8 +237,8 @@ class AbstractEvent {
     virtual bool write_data_body(Basic_ostream *) { return true; }
 
   public:
-    EventCommonHeader* common_header_;
-    EventCommonFooter* common_footer_;
+    EventCommonHeader *common_header_;
+    EventCommonFooter *common_footer_;
 
     enum Log_event_type type_code_ = UNKNOWN_EVENT;
     uint32_t server_id_ = 1000; // 配置项读入

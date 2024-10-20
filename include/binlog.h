@@ -35,9 +35,10 @@ class TC_LOG {
 
 // 暂时不考虑 index 文件、lock
 class MYSQL_BIN_LOG : TC_LOG {
-
   public:
-    explicit MYSQL_BIN_LOG(Basic_ostream* ostream) : m_binlog_file_(dynamic_cast<Binlog_ofile *>(ostream)) {}
+    explicit MYSQL_BIN_LOG(Basic_ostream *ostream)
+        : m_binlog_file_(dynamic_cast<Binlog_ofile *>(ostream)) {}
+
     ~MYSQL_BIN_LOG() override = default;
 
   private:
@@ -57,11 +58,14 @@ class MYSQL_BIN_LOG : TC_LOG {
 
   public:
     //********************* common file operation *************************
-    bool open(const char *file_name, uint64_t file_size) override;  // 构造函数
-    void close() override; // 析构函数
+    bool open(const char *file_name, uint64_t file_size) override; // 构造函数
+    void close() override;                                         // 析构函数
 
     // 告诉编译器，这个变量很重要
-    [[nodiscard]] bool is_open() const { return atomic_log_state != LOG_CLOSED; }
+    [[nodiscard]]
+    bool is_open() const {
+        return atomic_log_state != LOG_CLOSED;
+    }
 
     /*
      * 在 master 上生成 binlog，Format_description_log_event 是

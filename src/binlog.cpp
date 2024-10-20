@@ -12,7 +12,8 @@ int MYSQL_BIN_LOG::create_file(const char *file_name, uint64_t file_size) {
     // Ensure the file name is set properly and within limits
     if (file_name) {
         std::strncpy(log_file_name_, file_name, FN_REFLEN - 1);
-        log_file_name_[FN_REFLEN - 1] = '\0'; // Null-terminate to prevent overflow
+        log_file_name_[FN_REFLEN - 1] =
+            '\0'; // Null-terminate to prevent overflow
 
         // Instantiate the m_binlog_file_ object
         if (!m_binlog_file_) {
@@ -42,7 +43,8 @@ bool MYSQL_BIN_LOG::open(const char *file_name, uint64_t file_size) {
     if (ret) {
         atomic_log_state = LOG_OPENED;
     } else {
-        std::cerr << "Failed to open binlog file: " << log_file_name_ << std::endl;
+        std::cerr << "Failed to open binlog file: " << log_file_name_
+                  << std::endl;
         atomic_log_state = LOG_CLOSED;
         return false;
     }
@@ -80,7 +82,10 @@ void MYSQL_BIN_LOG::close() {
 bool MYSQL_BIN_LOG::write_event_to_binlog(AbstractEvent *ev) {
     return ev->write(this->m_binlog_file_);
 }
-void MYSQL_BIN_LOG::update_binlog_end_pos(const char *file, loft::my_off_t pos) {
+
+void MYSQL_BIN_LOG::update_binlog_end_pos(
+    const char *file, loft::my_off_t pos
+) {
     // TODO
     return;
 }

@@ -242,6 +242,11 @@ class AbstractEvent {
 
     enum Log_event_type type_code_ = UNKNOWN_EVENT;
     uint32_t server_id_ = 1000; // 配置项读入
+    /* The number of seconds the query took to run on the master. */
+    ulong exec_time_ = 2;
+    uint32_t slave_proxy_id_ = 10000;
+    bool query_start_usec_used_ = true;
+    uint16_t p_default_collation_for_utf8mb4_number_= 1;
 };
 
 #endif // LOFT_ABSTRACT_EVENT_H

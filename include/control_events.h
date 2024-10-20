@@ -67,7 +67,6 @@ class Previous_gtids_event : public AbstractEvent {
     /**
         Constructor
      */
-//    Previous_gtids_event();
     // TODO add class Gtid_set
     Previous_gtids_event(const Gtid_set *set);
 

@@ -17,6 +17,7 @@ Query_event::Query_event(
     const char *query_arg,
     const char *catalog_arg,
     const char *db_arg,
+    uint64_t ddl_xid_arg,
     uint32_t query_length,
     unsigned long thread_id_arg,
     unsigned long long sql_mode_arg,
@@ -29,6 +30,7 @@ Query_event::Query_event(
     : AbstractEvent(QUERY_EVENT)
     , query_(query_arg)
     , db_(db_arg)
+    ,ddl_xid(ddl_xid_arg)
     , catalog_(catalog_arg)
     , user_(nullptr)
     , user_len_(0)
@@ -53,13 +55,15 @@ Query_event::Query_event(
     , table_map_for_update(table_map_for_update_arg)
     , explicit_defaults_ts(TERNARY_UNSET)
     , mts_accessed_dbs(0)
-    , ddl_xid(INVALID_XID)
     , default_collation_for_utf8mb4_number_(0)
     , sql_require_primary_key(0xff)
     , default_table_encryption(0xff) {
 
-    ddl_xid = 31;
     default_collation_for_utf8mb4_number_ = p_default_collation_for_utf8mb4_number_;
+    if (db_arg == nullptr)
+        db_len_ = 0;
+    else
+        db_len_ = strlen(db_arg);
 
     this->common_header_ = new EventCommonHeader();
     this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
@@ -163,6 +167,7 @@ bool Query_event::write(Basic_ostream *ostream) {
         start += 8;
     }
     // *****************db name ******************
+
     if (db_ != nullptr) {
         *start++ = Q_UPDATED_DB_NAMES;
         uchar dbs = 1;

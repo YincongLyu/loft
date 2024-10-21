@@ -196,6 +196,7 @@ class Query_event : public AbstractEvent {
         const char *query_arg,
         const char *catalog_arg,
         const char *db_arg,
+        uint64_t ddl_xid_arg,
         uint32_t query_length,
         unsigned long thread_id_arg,
         unsigned long long sql_mode_arg,

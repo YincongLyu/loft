@@ -297,12 +297,16 @@ class Gtid_event : public AbstractEvent {
  */
 class Xid_event : public AbstractEvent {
   public:
-    explicit Xid_event(uint64_t xid_arg)
-        : AbstractEvent(XID_EVENT)
-        , xid(xid_arg) {}
+    Xid_event(uint64_t xid_arg);
+    ~Xid_event() override = default;
+
+    // ********* impl virtual function *********************
+    size_t get_data_size() override { return sizeof(xid_); }
+    bool write(Basic_ostream *ostream) override;
+
 
   private:
-    uint64_t xid;
+    uint64_t xid_;
 };
 
 /**
@@ -318,8 +322,8 @@ class Xid_event : public AbstractEvent {
  */
 class Rotate_event : public AbstractEvent {
   public:
-    const char *new_log_ident_;
-    size_t ident_len_;
+    const char *new_log_ident_; // nxt binlog file_name
+    size_t ident_len_; // nxt file_name length
     unsigned int flags_;
     uint64_t pos_;
 
@@ -335,21 +339,17 @@ class Rotate_event : public AbstractEvent {
         R_IDENT_OFFSET = 8
     };
 
-    Rotate_event(
-        const char *new_log_ident_arg,
-        size_t ident_len_arg,
-        unsigned int flags_arg,
-        uint64_t pos_arg
-    )
-        : AbstractEvent(ROTATE_EVENT)
-        , new_log_ident_(new_log_ident_arg)
-        , ident_len_(ident_len_arg ? ident_len_arg : strlen(new_log_ident_arg))
-        , flags_(flags_arg)
-        , pos_(pos_arg) {}
+    Rotate_event(const char *new_log_ident_arg, size_t ident_len_arg,
+                 unsigned int flags_arg, uint64_t pos_arg);
 
     ~Rotate_event() override {
-        // if (flags & DUP_NAME) bapi_free(const_cast<char *>(new_log_ident));
+         if (flags_ & DUP_NAME) free(const_cast<char *>(new_log_ident_));
     }
+
+    // ********* impl virtual function *********************
+    size_t get_data_size() override { return ident_len_ + ROTATE_HEADER_LEN; }
+    bool write(Basic_ostream *ostream) override;
+
 };
 
 #endif // LOFT_CONTROL_EVENTS_H

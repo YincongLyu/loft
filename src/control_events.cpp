@@ -282,3 +282,51 @@ bool Gtid_event::write(Basic_ostream *ostream) {
 }
 
 Gtid_event::~Gtid_event() = default;
+
+/**************************************************************************
+        Xid_event methods
+**************************************************************************/
+Xid_event::Xid_event(uint64_t xid_arg)  : AbstractEvent(XID_EVENT)
+    , xid_(xid_arg) {
+
+    this->common_header_ = new EventCommonHeader();
+    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+}
+
+bool Xid_event::write(Basic_ostream *ostream) {
+    return write_common_header(ostream, get_data_size()) &&
+                   ostream->write((uchar *)&xid_, sizeof(xid_)) &&
+                   write_common_footer(ostream);
+}
+
+
+/**************************************************************************
+        Rotate_event methods
+**************************************************************************/
+
+
+// FIXME 现在是直接把 pos = 4，如果前一个文件空间不足，直接忽略文件后面的部分
+
+Rotate_event::Rotate_event(const char *new_log_ident_arg, size_t ident_len_arg,
+             unsigned int flags_arg, uint64_t pos_arg
+)
+    : AbstractEvent(ROTATE_EVENT)
+    , new_log_ident_(new_log_ident_arg)
+    , ident_len_(ident_len_arg ? ident_len_arg : strlen(new_log_ident_arg))
+    , flags_(flags_arg) /* DUP_NAME */
+    , pos_(pos_arg) { /* 4 byte */
+
+    this->common_header_ = new EventCommonHeader();
+    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+}
+
+bool Rotate_event::write(Basic_ostream *ostream) {
+    uchar buf[AbstractEvent::ROTATE_HEADER_LEN];
+    int8store(buf + R_POS_OFFSET, pos_);
+    return
+        write_common_header(ostream, get_data_size()) &&
+        ostream->write((uchar *)buf,AbstractEvent::ROTATE_HEADER_LEN) &&
+        ostream->write(pointer_cast<const uchar *>(new_log_ident_), (uint)ident_len_) &&
+        write_common_footer(ostream);
+}
+

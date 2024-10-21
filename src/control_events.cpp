@@ -183,7 +183,7 @@ Gtid_event::Gtid_event(
 size_t Gtid_event::get_data_size() {
     // 默认 txn_length = 0, 省略 net_length_size(transaction_length) 大小
     // 只有考虑 commit_group_ticket 参数，才会计算 txn_length
-    return POST_HEADER_LENGTH + get_commit_timestamp_length()
+    return POST_HEADER_LENGTH + get_commit_timestamp_length() + 1
            + get_server_version_length();
 }
 
@@ -191,22 +191,22 @@ uint32_t Gtid_event::write_post_header_to_memory(uchar *buffer) {
     uchar *ptr_buffer = buffer;
 
     /* Encode the GTID flags */
-    uchar gtid_flags = 0;
+    uchar gtid_flags = 0; // 1 byte
     gtid_flags |= may_have_sbr_stmts_ ? Gtid_event::FLAG_MAY_HAVE_SBR : 0;
     *ptr_buffer = gtid_flags;
     ptr_buffer += ENCODED_FLAG_LENGTH;
 
-    sid_.copy_to(ptr_buffer);
+    sid_.copy_to(ptr_buffer); // 16 byte
     ptr_buffer += ENCODED_SID_LENGTH;
 
-    int8store(ptr_buffer, spec_.gtid_.gno_);
+    int8store(ptr_buffer, spec_.gtid_.gno_); // 8 byte
     ptr_buffer += ENCODED_GNO_LENGTH;
 
     *ptr_buffer = LOGICAL_TIMESTAMP_TYPECODE;
-    ptr_buffer += LOGICAL_TIMESTAMP_TYPECODE_LENGTH;
+    ptr_buffer += LOGICAL_TIMESTAMP_TYPECODE_LENGTH; // 1 byte
 
-    int8store(ptr_buffer, last_committed_);
-    int8store(ptr_buffer + 8, sequence_number_);
+    int8store(ptr_buffer, last_committed_); // 8 byte
+    int8store(ptr_buffer + 8, sequence_number_); // 8 byte
     ptr_buffer += LOGICAL_TIMESTAMP_LENGTH;
 
     assert(ptr_buffer == (buffer + POST_HEADER_LENGTH));
@@ -243,7 +243,7 @@ uint32_t Gtid_event::write_body_to_memory(uchar *buffer) {
         ptr_buffer += ORIGINAL_COMMIT_TIMESTAMP_LENGTH;
     }
 
-    // Write the transaction length information
+    // Write the transaction length information, 即使 txn_len = 0, 也会占一个 byte
     uchar *ptr_after_length = net_store_length(ptr_buffer, transaction_length_);
     ptr_buffer = ptr_after_length;
 
@@ -265,18 +265,15 @@ uint32_t Gtid_event::write_body_to_memory(uchar *buffer) {
         ptr_buffer += ORIGINAL_SERVER_VERSION_LENGTH;
     }
 
-    // 无外设 commit_group_ticket，故默认和 kTicketUnset 一致，不用算空间
-
-    //    if (this->commit_group_ticket != binlog::BgcTicket::kTicketUnset) {
-    //        int8store(ptr_buffer, this->commit_group_ticket);
-    //        ptr_buffer += COMMIT_GROUP_TICKET_LENGTH;
-    //    }
     return ptr_buffer - buffer;
 }
 
 bool Gtid_event::write_data_body(Basic_ostream *ostream) {
     uchar buffer[MAX_DATA_LENGTH];
     uint32_t len = write_body_to_memory(buffer);
+
+    std::cout << "gtid_event_data_body len: " << len <<std::endl; // 7 + 7 + 1 + 4 = 19 byte
+
     return ostream->write((uchar *)buffer, len);
 }
 

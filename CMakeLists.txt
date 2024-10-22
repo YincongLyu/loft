@@ -38,6 +38,11 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # -- Includes
 include_directories(${PROJECT_SOURCE_DIR}/include)
+# -- third Libraries
+# 设置 RapidJSON 目录
+set(RAPIDJSON_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/third_party/rapidjson/include")
+# 将 RapidJSON 添加到项目的 include 路径
+include_directories(${RAPIDJSON_INCLUDE_DIR})
 
 # Add subdirectory for source
 add_subdirectory(src)

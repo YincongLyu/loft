@@ -4,6 +4,8 @@
 #include "binlog.h"
 #include "control_events.h"
 #include "statement_events.h"
+#include "rows_event.h"
+#include "table_id.h"
 
 #include <fstream>
 #include <gtest/gtest.h>
@@ -101,7 +103,7 @@ TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_GTID_EVENT) {
     binlog.close();
 }
 
-TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_QUERY_EVENT) {
+TEST(STATEMENT_EVENT_FORMAT_TEST, DISABLED_QUERY_EVENT) {
     MYSQL_BIN_LOG binlog(new Binlog_ofile());
     const char *test_file_name = "test_query";
     uint64_t test_file_size = 1024;
@@ -115,6 +117,7 @@ TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_QUERY_EVENT) {
     const char *query_arg = "create database t1";
     const char *catalog_arg = nullptr;
     const char *db_arg = nullptr; // 假设没有的话，mysqlbinlog默认理解成 mysql，所以会 use 'mysql'
+    uint64_t ddl_xid_arg = 31;
     uint32_t query_length = strlen(query_arg);
     unsigned long thread_id_arg = 10000;
     unsigned long long sql_mode_arg = 0; // 随意
@@ -124,13 +127,43 @@ TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_QUERY_EVENT) {
     unsigned long long table_map_for_update_arg = 0; // 随意
     int errcode = 0;
 
-    Query_event* qe = new Query_event(query_arg, catalog_arg, db_arg, query_length, thread_id_arg, sql_mode_arg,
+    Query_event* qe = new Query_event(query_arg, catalog_arg, db_arg, ddl_xid_arg, query_length, thread_id_arg, sql_mode_arg,
                                       auto_increment_increment_arg, auto_increment_offset_arg, number, table_map_for_update_arg, errcode);
 
     binlog.write_event_to_binlog(qe);
 
     binlog.close();
 }
+
+TEST(ROWS_EVENT_FORMAT_TEST, DISABLED_TABLE_MAP_EVENT) {
+    MYSQL_BIN_LOG binlog(new Binlog_ofile());
+    const char *test_file_name = "test_table_map";
+    uint64_t test_file_size = 1024;
+
+    if (!binlog.open(test_file_name, test_file_size)) {
+        std::cerr << "Failed to open binlog file." << std::endl;
+    }
+
+    std::cout << "Binlog file opened successfully." << std::endl;
+
+    // 1. 查询 table_name 是否访问过， 如果没有， 就创建一个 Table_id 对象，插入 mgr 的uamp
+    Table_id tid(13);
+    // 2. 读 field's size()
+    unsigned long colCnt = 27;
+    const char* dbName = "t1";
+    size_t dbLen = strlen(dbName);
+    const char* tblName = "t1";
+    size_t tblLen = strlen(tblName);
+
+    Table_map_event tme(tid, colCnt, dbName, dbLen, tblName, tblLen);
+//
+    binlog.write_event_to_binlog(&tme);
+
+    binlog.close();
+}
+
+
+
 
 TEST(EVENT_FORMAT_TEST, DISABLED_PRINT_BINARY_FILE_TO_HEX) {
     std::string filename = "test_magic_fde";

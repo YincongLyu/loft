@@ -14,4 +14,6 @@ target_include_directories(loft
     PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    PRIVATE
+        ${RAPIDJSON_INCLUDE_DIR}
 )

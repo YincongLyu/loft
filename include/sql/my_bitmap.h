@@ -7,12 +7,12 @@
 
 #define MY_BIT_NONE (~(uint)0)
 
+#include <../constants.h>
 #include <assert.h>
+#include <cstdint>
 #include <limits.h>
 #include <string.h>
-#include <constants.h>
 #include <sys/types.h>
-#include <cstdint>
 
 typedef uint32_t my_bitmap_map;
 
@@ -23,6 +23,9 @@ struct MY_BITMAP {
     my_bitmap_map *last_word_ptr{nullptr};
 };
 
+// 初始化
+// 检查状态、设置和清除位置
+// 集合操作
 extern void create_last_word_mask(MY_BITMAP *map);
 extern bool bitmap_init(MY_BITMAP *map, my_bitmap_map *buf, uint n_bits);
 extern bool bitmap_is_clear_all(const MY_BITMAP *map);
@@ -46,16 +49,17 @@ extern void bitmap_union(MY_BITMAP *map, const MY_BITMAP *map2);
 extern void bitmap_xor(MY_BITMAP *map, const MY_BITMAP *map2);
 extern void bitmap_invert(MY_BITMAP *map);
 extern void bitmap_copy(MY_BITMAP *map, const MY_BITMAP *map2);
-extern uint bitmap_n_copy(MY_BITMAP *dst, const MY_BITMAP *src,
-                          uint max_bits_to_copy = UINT_MAX);
+extern uint bitmap_n_copy(
+    MY_BITMAP *dst, const MY_BITMAP *src, uint max_bits_to_copy = UINT_MAX
+);
 
 #define bitmap_buffer_size(bits) (((bits) + 31) / 32) * 4
-#define no_bytes_in_map(map) (((map)->n_bits + 7) / 8)
-#define no_words_in_map(map) (((map)->n_bits + 31) / 32)
+#define no_bytes_in_map(map)     (((map)->n_bits + 7) / 8)
+#define no_words_in_map(map)     (((map)->n_bits + 31) / 32)
 
 static inline void bitmap_set_bit(MY_BITMAP *map, uint bit) {
     assert(bit < map->n_bits);
-    ((uchar*)map->bitmap)[bit / 8] |= (1 << (bit & 7));
+    ((uchar *)map->bitmap)[bit / 8] |= (1 << (bit & 7));
 }
 
 static inline void bitmap_flip_bit(MY_BITMAP *map, uint bit) {
@@ -85,10 +89,14 @@ static inline bool bitmap_cmp(const MY_BITMAP *map1, const MY_BITMAP *map2) {
     assert(map1->n_bits > 0);
     assert(map2->n_bits > 0);
 
-    if (memcmp(map1->bitmap, map2->bitmap, 4 * (no_words_in_map(map1) - 1)) != 0)
-    return false;
-  return ((*map1->last_word_ptr | map1->last_word_mask) ==
-            (*map2->last_word_ptr | map2->last_word_mask));
+    if (memcmp(map1->bitmap, map2->bitmap, 4 * (no_words_in_map(map1) - 1))
+        != 0) {
+        return false;
+    }
+    return (
+        (*map1->last_word_ptr | map1->last_word_mask)
+        == (*map2->last_word_ptr | map2->last_word_mask)
+    );
 }
 
 /*
@@ -104,7 +112,5 @@ static inline void bitmap_clear_all(MY_BITMAP *map) {
 static inline void bitmap_set_all(MY_BITMAP *map) {
     memset(map->bitmap, 0xFF, 4 * no_words_in_map(map));
 }
-
-
 
 #endif // LOFT_MY_BITMAP_H

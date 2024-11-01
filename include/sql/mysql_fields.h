@@ -5,23 +5,23 @@
 #ifndef LOFT_MYSQL_FIELDS_H
 #define LOFT_MYSQL_FIELDS_H
 
-#include <assert.h>
-#include <limits.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cassert>
+#include <climits>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <sys/types.h>
 
 #include <algorithm>
-#include <opencl-c-base.h>
 #include <optional>
 
-#include "../common/macros.h"
+//#include "../common/macros.h"
 #include "constants.h"
 #include "field_common_properties.h"
 #include "field_types.h" // enum_field_types
+
+namespace mysql {
 
 class Field {
   private:
@@ -34,7 +34,7 @@ class Field {
     const char *field_name;
 
     bool m_null = false;
-    uchar null_bit; // Bit used to test null bit
+    unsigned char null_bit; // Bit used to test null bit
 
     // Max width for a VARCHAR column, in number of bytes
     static constexpr size_t MAX_VARCHAR_WIDTH{65535};
@@ -65,7 +65,7 @@ class Field {
     uint32_t all_flags() const { return flags; }
 
   public:
-    DISALLOW_COPY(Field);
+//    DISALLOW_COPY(Field);
     Field(
         uint32_t length_arg,
         bool is_nullable_arg,
@@ -92,7 +92,7 @@ class Field {
 
     virtual uint row_pack_length() const { return 0; }
 
-    int save_field_metadata(uchar *first_byte) {
+    int save_field_metadata(unsigned char *first_byte) {
         return do_save_field_metadata(first_byte);
     }
 
@@ -116,7 +116,7 @@ class Field {
 
     virtual bool is_unsigned() const { return false; }
 
-    virtual uint decimals() const { return 0; }
+    virtual uint32_t decimals() const { return 0; }
 
     /// @return true if this field is NULL-able, false otherwise.
 
@@ -433,7 +433,7 @@ class Field_double final : public Field_real {
 
 class Field_temporal : public Field {
   protected:
-    uint8 dec; // Number of fractional digits
+    uint8_t dec; // Number of fractional digits
 
     /**
     Adjust number of decimal digits from DECIMAL_NOT_SPECIFIED to
@@ -524,6 +524,16 @@ class Field_timestamp : public Field_temporal_with_date_and_time {
     uint32_t pack_length() const final { return PACK_LENGTH; }
 };
 
+class Field_year final : public Field_tiny {
+  public:
+    Field_year(
+        bool is_nullable_arg, unsigned char null_bit_arg, const char *field_name_arg
+    )
+        : Field_tiny(4, is_nullable_arg, null_bit_arg, field_name_arg, true) {}
+
+    enum_field_types type() const final { return MYSQL_TYPE_YEAR; }
+};
+
 class Field_datetime : public Field_temporal_with_date_and_time {
   public:
     static const int PACK_LENGTH = 8;
@@ -589,7 +599,7 @@ class Field_str : public Field {
         const char *field_name_arg
     );
 
-    uint decimals() const override { return DECIMAL_NOT_SPECIFIED; }
+    uint32_t decimals() const override { return DECIMAL_NOT_SPECIFIED; }
 
     // An always-updated cache of the result of char_length(), because
     // dividing by charset()->mbmaxlen can be surprisingly costly compared
@@ -617,19 +627,16 @@ class Field_string : public Field_longstr {
     Field_string(
         uint32_t len_arg,
         bool is_nullable_arg,
-        uchar null_bit_arg,
+        unsigned char null_bit_arg,
         const char *field_name_arg
     )
         : Field_longstr(
               len_arg, is_nullable_arg, null_bit_arg, field_name_arg
           ) {}
 
-    Field_string(
-        uint32_t len_arg, bool is_nullable_arg, const char *field_name_arg
-    )
-        : Field_longstr(len_arg, is_nullable_arg, 0, field_name_arg) {}
 
     enum_field_types type() const final { return MYSQL_TYPE_STRING; }
+    enum_field_types real_type() const final { return MYSQL_TYPE_STRING; }
 
     uint row_pack_length() const final { return field_length; }
 
@@ -655,11 +662,12 @@ class Field_varstring : public Field_longstr {
         uint32_t len_arg,
         uint length_bytes_arg,
         bool is_nullable_arg,
-        uchar null_bit_arg,
+        unsigned char null_bit_arg,
         const char *field_name_arg
     );
 
     enum_field_types type() const final { return MYSQL_TYPE_VARCHAR; }
+    enum_field_types real_type() const final { return MYSQL_TYPE_VARCHAR; }
 
     uint32_t pack_length() const final {
         return (uint32_t)field_length + length_bytes;
@@ -670,7 +678,7 @@ class Field_varstring : public Field_longstr {
 
 class Field_blob : public Field_longstr {
   private:
-    int do_save_field_metadata(uchar *first_byte) const override;
+    int do_save_field_metadata(unsigned char *first_byte) const override;
 
   protected:
     /**
@@ -757,8 +765,7 @@ class Field_enum : public Field_str {
         TYPELIB *typelib_arg
     )
         : Field_str(len_arg, is_nullable_arg, null_bit_arg, field_name_arg)
-        , packlength(packlength_arg)
-        , typelib(typelib_arg) {
+        , packlength(packlength_arg) {
         set_flag(ENUM_FLAG);
     }
 
@@ -877,4 +884,5 @@ inline bool is_temporal_real_type(enum_field_types type) {
     }
 }
 
+}
 #endif // LOFT_MYSQL_FIELDS_H

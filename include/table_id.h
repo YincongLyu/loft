@@ -4,8 +4,8 @@
 
 #ifndef LOFT_TABLE_ID_H
 #define LOFT_TABLE_ID_H
-#include <cstdint>
 #include <assert.h>
+#include <cstdint>
 
 class Table_id {
   private:
@@ -15,9 +15,11 @@ class Table_id {
 
   public:
     Table_id() : m_id_(0) {}
+
     explicit Table_id(unsigned long long id) : m_id_(id) {}
 
     unsigned long long get_id() const { return m_id_; }
+
     bool is_valid() const { return m_id_ <= TABLE_ID_MAX; }
 
     Table_id &operator=(unsigned long long id) {
@@ -26,6 +28,7 @@ class Table_id {
     }
 
     bool operator==(const Table_id &tid) const { return m_id_ == tid.m_id_; }
+
     bool operator!=(const Table_id &tid) const { return m_id_ != tid.m_id_; }
 
     /* Support implicit type converting from Table_id to unsigned long long */

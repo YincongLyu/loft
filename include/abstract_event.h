@@ -246,7 +246,7 @@ class AbstractEvent {
     ulong exec_time_ = 2;
     uint32_t slave_proxy_id_ = 10000;
     bool query_start_usec_used_ = true;
-    uint16_t p_default_collation_for_utf8mb4_number_= 1;
+//    uint16_t p_default_collation_for_utf8mb4_number_ = 255;
 };
 
 #endif // LOFT_ABSTRACT_EVENT_H

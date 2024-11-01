@@ -5,6 +5,11 @@
 
 bool Binlog_ofile::write(const loft::uchar *buffer, loft::my_off_t length) {
     assert(m_pipeline_head_ != nullptr);
+
+    if (length == 0) {
+        return true;
+    }
+
     m_pipeline_head_->write(reinterpret_cast<const char *>(buffer), length);
 
     if (!m_pipeline_head_->good()) {

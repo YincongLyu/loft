@@ -34,7 +34,6 @@ inline const T pointer_cast(const void *p) {
     return static_cast<T>(p);
 }
 
-
 /**
    Utility to allow returning values from functions which can fail
    (until we have std::optional).
@@ -47,8 +46,5 @@ struct ReturnValueOrError {
     /** True if an error occurred. */
     bool error;
 };
-
-
-
 
 #endif // LOFT_TEMPLATE_UITLS_H

@@ -9,7 +9,7 @@
 #include "sql/mysql_fields.h"
 #include "table_id.h"
 #include <memory>
-#include <rapidjson/stringbuffer.h>
+
 #include <vector>
 
 class Table_map_event : public AbstractEvent {

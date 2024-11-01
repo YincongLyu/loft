@@ -6,7 +6,7 @@
 #include "abstract_event.h"
 #include "little_endian.h"
 
-#include "logging.h"
+//#include "logging.h"
 
 
 template <typename T, typename UT>
@@ -111,7 +111,7 @@ Table_map_event::Table_map_event(
     long pos = 0;
     for (auto &field : m_column_view_) {
         m_coltype_[pos++] = field->binlog_type();
-        LOG_INFO("init coltype_: field->binlog_type() = %d", field->binlog_type());
+//        LOG_INFO("init coltype_: field->binlog_type() = %d", field->binlog_type());
     }
 
     uchar cbuf[sizeof(m_colcnt_) + 1];
@@ -141,7 +141,7 @@ Table_map_event::Table_map_event(
         bit_writer.set(field->is_nullable());
     }
 
-    LOG_INFO("table_map_event data size: %zu", m_data_size_);
+//    LOG_INFO("table_map_event data size: %zu", m_data_size_);
 
     this->common_header_ = new EventCommonHeader();
     this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);

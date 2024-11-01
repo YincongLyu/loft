@@ -302,8 +302,8 @@ class Xid_event : public AbstractEvent {
 
     // ********* impl virtual function *********************
     size_t get_data_size() override { return sizeof(xid_); }
-    bool write(Basic_ostream *ostream) override;
 
+    bool write(Basic_ostream *ostream) override;
 
   private:
     uint64_t xid_;
@@ -323,7 +323,7 @@ class Xid_event : public AbstractEvent {
 class Rotate_event : public AbstractEvent {
   public:
     const char *new_log_ident_; // nxt binlog file_name
-    size_t ident_len_; // nxt file_name length
+    size_t ident_len_;          // nxt file_name length
     unsigned int flags_;
     uint64_t pos_;
 
@@ -339,17 +339,23 @@ class Rotate_event : public AbstractEvent {
         R_IDENT_OFFSET = 8
     };
 
-    Rotate_event(const char *new_log_ident_arg, size_t ident_len_arg,
-                 unsigned int flags_arg, uint64_t pos_arg);
+    Rotate_event(
+        const char *new_log_ident_arg,
+        size_t ident_len_arg,
+        unsigned int flags_arg,
+        uint64_t pos_arg
+    );
 
     ~Rotate_event() override {
-         if (flags_ & DUP_NAME) free(const_cast<char *>(new_log_ident_));
+        if (flags_ & DUP_NAME) {
+            free(const_cast<char *>(new_log_ident_));
+        }
     }
 
     // ********* impl virtual function *********************
     size_t get_data_size() override { return ident_len_ + ROTATE_HEADER_LEN; }
-    bool write(Basic_ostream *ostream) override;
 
+    bool write(Basic_ostream *ostream) override;
 };
 
 #endif // LOFT_CONTROL_EVENTS_H

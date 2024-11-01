@@ -4,9 +4,9 @@
 
 #include "binlog.h"
 #include "constants.h"
-#include "table_id.h"
 #include "ddl_generated.h"
 #include "dml_generated.h"
+#include "table_id.h"
 #include <cstring>
 #include <memory>
 #include <unordered_map>
@@ -47,8 +47,6 @@ class MyReader {
         ptr_ = ptr_ + length;
     }
 
-
-
     unsigned long long position() {
         return ptr_ >= buffer_ ? ptr_ - buffer_ : limit_;
     }
@@ -61,7 +59,8 @@ class MyReader {
             return le32toh(value);
         } else if constexpr (std::is_same_v<T, uint32_t>) {
             return le32toh(value);
-        } else if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+        } else if constexpr (std::is_same_v<T, int64_t>
+                             || std::is_same_v<T, uint64_t>) {
             return le64toh(value);
         } else {
             throw std::invalid_argument("Unsupported type for letoh");
@@ -100,8 +99,8 @@ class LogFormatTransformManager {
     void transformDML(const DML *dml, MYSQL_BIN_LOG *binLog);
 
   private:
-    std::string filepath_;                   // 文件路径，默认是 ./data
-    const int intOffset_ = loft::INT_OFFSET; // 头部，前 4 个字节存长度
+    std::string filepath_;                     // 文件路径，默认是 ./data
+    const int intOffset_ = loft::INT_OFFSET;   // 头部，前 4 个字节存长度
     uint32_t original_server_version_ = 80026; // 配置项读入
     uint32_t immediate_server_version_ = 80026;
 

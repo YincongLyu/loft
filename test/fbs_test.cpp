@@ -1,6 +1,8 @@
 #include "binlog.h"
 #include "ddl_generated.h"
 #include "file_manager.h"
+//#include "logging.h"
+//#include "macros.h"
 
 #include <gtest/gtest.h>
 #include <iostream>
@@ -40,7 +42,7 @@ TEST(DDL_TEST, DISABLED_CREATE_DB_LEN) {
     EXPECT_EQ(sql_len, 248);
 }
 
-TEST(SQL_TEST, DISABLED_DDL) {
+TEST(SQL_TEST, DDL) {
     // 1. 新建一个 binlog 文件，开启写功能
     MYSQL_BIN_LOG binlog(new Binlog_ofile());
     const char *test_file_name = "test_query_ddl";
@@ -50,9 +52,14 @@ TEST(SQL_TEST, DISABLED_DDL) {
         std::cerr << "Failed to open binlog file." << std::endl;
     }
 
-    std::cout << "Binlog file opened successfully." << std::endl;
+//    LOFT_ASSERT(
+//        !binlog.open(test_file_name, test_file_size),
+//        "Failed to open binlog file."
+//    );
+//    LOG_DEBUG("Binlog file opened successfully.");
 
-    // 2. mgr 转换工具负责 读待解析的中间 flatbuffer 数据，然后调用 响应的转换 函数
+    // 2. mgr 转换工具负责 读待解析的中间 flatbuffer 数据，然后调用 响应的转换
+    // 函数
 
     LogFormatTransformManager mgr;
     // 2.1 把待解析的 数据 装入 reader 中，后续可以利用 read/cpy 方法
@@ -62,7 +69,6 @@ TEST(SQL_TEST, DISABLED_DDL) {
     // 目前是读前 2 条，确定是 ddl sql
     int EPOCH = 2;
     for (int k = 0; k < EPOCH; k++) {
-
         auto sql_len = reader->read<uint32_t>();
 
         // 2.2. 进入转换流程，先初始化一片 内存空间， copy 出来
@@ -83,13 +89,15 @@ TEST(SQL_TEST, DISABLED_DDL) {
     binlog.close();
 }
 
-TEST(DML_TEST, INSERT) {
+TEST(DML_TEST, INSERT1) {
     LogFormatTransformManager mgr;
     // 待解析的 数据
     auto [data, fileSize] = mgr.readFileAsBinary();
     auto reader = std::make_unique<MyReader>(data.get(), fileSize);
     // 跳过前 2 条
-    reader->forward(sizeof (uint32_t) * 2 + SQL_SIZE_ARRAY[0] + SQL_SIZE_ARRAY[1]);
+    reader->forward(
+        sizeof(uint32_t) * 2 + SQL_SIZE_ARRAY[0] + SQL_SIZE_ARRAY[1]
+    );
 
     auto sql_len = reader->read<uint32_t>();
 
@@ -99,29 +107,30 @@ TEST(DML_TEST, INSERT) {
     reader->memcpy<unsigned char *>(buf.data(), sql_len);
 
     const DML *dml = GetDML(buf.data());
- // ************* 填数据 begin ************************
-    auto dbName =dml->db_name();
+    // ************* 填数据 begin ************************
+    auto dbName = dml->db_name();
     EXPECT_EQ(std::strcmp(dbName->c_str(), "t1"), 0);
 
     auto fields = dml->fields();
     EXPECT_EQ(fields->size(), 27);
-//    for (const auto& field : *fields) {
-//        field->name();
-//        auto fieldMeta = field->meta();
-//        fieldMeta->length();
-//        fieldMeta->is_unsigned();
-//        fieldMeta->nullable();
-//        fieldMeta->data_type();
-//        fieldMeta->precision();
-//    }
 
+    std::vector<std::unique_ptr<Field>> field_vec;
+    for (const auto &field : *fields) {
+        field->name();
+        auto fieldMeta = field->meta();
+        fieldMeta->length();
+        fieldMeta->is_unsigned();
+        fieldMeta->nullable();
+        fieldMeta->data_type(); // 根据 这里的类型，构建 对应的 Field 对象
+        fieldMeta->precision();
+    }
 
     // insert 没有 keys 要判断一下
     auto keys = dml->keys();
     if (keys) {
         std::cout << "insert sql not comes here" << std::endl;
     }
-    
+
     auto lastCommit = dml->last_commit();
     EXPECT_EQ(lastCommit, 33);
 
@@ -141,7 +150,7 @@ TEST(DML_TEST, INSERT) {
     auto originalCommitTs = dml->tx_time();
 }
 
-TEST(SQL_TEST, DISABLED_DML) {
+TEST(SQL_TEST, DML) {
     // 1. 新建一个 binlog 文件，开启写功能
     MYSQL_BIN_LOG binlog(new Binlog_ofile());
     const char *test_file_name = "test_query_dml";
@@ -151,21 +160,23 @@ TEST(SQL_TEST, DISABLED_DML) {
         std::cerr << "Failed to open binlog file." << std::endl;
     }
 
-    std::cout << "Binlog file opened successfully." << std::endl;
+//    LOG_DEBUG("Binlog file opened successfully.");
 
-    // 2. mgr 转换工具负责 读待解析的中间 flatbuffer 数据，然后调用 响应的转换 函数
+    // 2. mgr 转换工具负责 读待解析的中间 flatbuffer 数据，然后调用 响应的转换
+    // 函数
 
     LogFormatTransformManager mgr;
     // 2.1 把待解析的 数据 装入 reader 中，后续可以利用 read/cpy 方法
     auto [data, fileSize] = mgr.readFileAsBinary();
     auto reader = std::make_unique<MyReader>(data.get(), fileSize);
     // 跳过前 2 条
-    reader->forward(sizeof (uint32_t) * 2 + SQL_SIZE_ARRAY[0] + SQL_SIZE_ARRAY[1]);
+    reader->forward(
+        sizeof(uint32_t) * 2 + SQL_SIZE_ARRAY[0] + SQL_SIZE_ARRAY[1]
+    );
 
     // 读第 3 条，确定是 insert sql
     int EPOCH = 1;
     for (int k = 0; k < EPOCH; k++) {
-
         auto sql_len = reader->read<uint32_t>();
 
         // 2.2. 进入转换流程，先初始化一片 内存空间， copy 出来
@@ -174,18 +185,15 @@ TEST(SQL_TEST, DISABLED_DML) {
         // note！使用 flatbuffer 获取的对象，返回的是一个 raw ptr
         // 管理内存的方法不是使用 new/delete，所以不能直接转化成 unique_ptr
         const DML *dml = GetDML(buf.data());
-        if (dml) {
-            // Use the`  raw pointer directly
-            mgr.transformDML(dml, &binlog);
-        } else {
-            // Handle error cases
-            std::cerr << "Failed to parse DDL object.\n";
-        }
+
+//        LOFT_ASSERT(dml, "Failed to parse DML object.");
+        // Use the`  raw pointer directly
+        mgr.transformDML(dml, &binlog);
     }
     // 3. 关闭 binlog 文件流
+    binlog.flush();
     binlog.close();
 }
-
 
 TEST(SQL_TEST, DISABLED_DDL_AND_DML) {
     // 1. 读 data

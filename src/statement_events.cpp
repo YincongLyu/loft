@@ -5,7 +5,8 @@
 #include "abstract_event.h"
 #include "little_endian.h"
 #include "template_utils.h"
-//#include "logging.h"
+
+// #include "logging.h"
 
 /******************************************************************************
                      Query_event methods
@@ -61,16 +62,20 @@ Query_event::Query_event(
     , sql_require_primary_key(0xff)
     , default_table_encryption(0xff) {
 
+
+    time_zone_str_ = "UTC";
+    time_zone_len = strlen(time_zone_str_);
     if (db_arg == nullptr) {
         db_len_ = 0;
     } else {
         db_len_ = strlen(db_arg);
     }
 
-//    LOG_INFO("db_len_ = %zu, query_len = %zu", db_len_, q_len_);
+    catalog_len = db_len_;
+    //    LOG_INFO("db_len_ = %zu, query_len = %zu", db_len_, q_len_);
 
     this->common_header_ = new EventCommonHeader();
-    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+//    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
 /**
@@ -115,7 +120,7 @@ bool Query_event::write(Basic_ostream *ostream) {
     */
     int4store(buf + Q_THREAD_ID_OFFSET, slave_proxy_id_);
     int4store(buf + Q_EXEC_TIME_OFFSET, exec_time_);
-    buf[Q_DB_LEN_OFFSET] = (unsigned char) db_len_;
+    buf[Q_DB_LEN_OFFSET] = (unsigned char)db_len_;
     int2store(buf + Q_ERR_CODE_OFFSET, error_code_);
 
     /*
@@ -125,9 +130,9 @@ bool Query_event::write(Basic_ostream *ostream) {
     */
     start_of_status = start = buf + AbstractEvent::QUERY_HEADER_LEN;
 
-    if (ddl_xid == INVALID_XID) {
-        goto cal_status_var;
-    }
+    //    if (ddl_xid == INVALID_XID) {
+    //        goto cal_status_var;
+    //    }
 
     if (flags2_inited) {
         *start++ = Q_FLAGS2_CODE;
@@ -138,6 +143,12 @@ bool Query_event::write(Basic_ostream *ostream) {
         *start++ = Q_SQL_MODE_CODE;
         int8store(start, sql_mode);
         start += 8;
+    }
+    if (catalog_len) // i.e. this var is inited (false for 4.0 events)
+    {
+        write_str_with_code_and_len(
+            &start, catalog_, catalog_len, Q_CATALOG_NZ_CODE
+        );
     }
 
     if (auto_increment_increment != 1 || auto_increment_offset != 1) {
@@ -181,6 +192,37 @@ bool Query_event::write(Basic_ostream *ostream) {
         int8store(start, table_map_for_update);
         start += 8;
     }
+
+    if (need_binlog_invoker_) {
+        LEX_CSTRING invoker_user{nullptr, 0};
+        LEX_CSTRING invoker_host{nullptr, 0};
+        memset(&invoker_user, 0, sizeof(invoker_user));
+        memset(&invoker_host, 0, sizeof(invoker_host));
+
+        invoker_user = get_invoker_user();
+        invoker_host = get_invoker_host();
+
+        *start++ = Q_INVOKER;
+
+        /*
+          Store user length and user. The max length of use is 16, so 1 byte is
+          enough to store the user's length.
+         */
+        *start++ = (uchar)invoker_user.length;
+        memcpy(start, invoker_user.str, invoker_user.length);
+        start += invoker_user.length;
+
+        /*
+          Store host length and host. The max length of host is 255, so 1 byte
+          is enough to store the host's length.
+         */
+        *start++ = (uchar)invoker_host.length;
+        if (invoker_host.length > 0) {
+            memcpy(start, invoker_host.str, invoker_host.length);
+        }
+        start += invoker_host.length;
+    }
+
     // *****************db name ******************
 
     if (db_ != nullptr) {
@@ -216,9 +258,9 @@ bool Query_event::write(Basic_ostream *ostream) {
         start += 2;
     }
 
-    goto cal_status_var;
+    //    goto cal_status_var;
 
-cal_status_var:
+    // cal_status_var:
     /* Store length of status variables */
     status_vars_len_ = static_cast<uint>(start - start_of_status);
     assert(status_vars_len_ <= MAX_SIZE_LOG_EVENT_STATUS);
@@ -238,7 +280,5 @@ cal_status_var:
                    : pointer_cast<const uchar *>(""),
                db_len_ + 1
            )
-           && ostream->write(pointer_cast<const uchar *>(query_), q_len_)
-           && write_common_footer(ostream);
-
+           && ostream->write(pointer_cast<const uchar *>(query_), q_len_);
 }

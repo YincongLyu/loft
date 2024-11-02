@@ -213,11 +213,10 @@ class AbstractEvent {
     //    virtual bool write(Basic_ostream *ostream) = 0;
 
     virtual bool write(Basic_ostream *ostream) {
-        return (
+        return
             write_common_header(ostream, get_data_size())
-            && write_data_header(ostream) && write_data_body(ostream)
-            && write_common_footer(ostream)
-        );
+            && write_data_header(ostream) && write_data_body(ostream);
+
     }
 
     /*
@@ -236,6 +235,14 @@ class AbstractEvent {
 
     virtual bool write_data_body(Basic_ostream *) { return true; }
 
+    LEX_CSTRING get_invoker_user() {
+        return {"", 0};
+    }
+    LEX_CSTRING get_invoker_host() {
+        std::string host = "127.0.0.1";
+        return {host.c_str(), host.length()};
+    }
+
   public:
     EventCommonHeader *common_header_;
     EventCommonFooter *common_footer_;
@@ -247,6 +254,7 @@ class AbstractEvent {
     uint32_t slave_proxy_id_ = 10000;
     bool query_start_usec_used_ = true;
 //    uint16_t p_default_collation_for_utf8mb4_number_ = 255;
+    bool need_binlog_invoker_ = true;
 };
 
 #endif // LOFT_ABSTRACT_EVENT_H

@@ -16,7 +16,7 @@
 #include <algorithm>
 #include <optional>
 
-//#include "../common/macros.h"
+#include "../common/macros.h"
 #include "constants.h"
 #include "field_common_properties.h"
 #include "field_types.h" // enum_field_types
@@ -65,7 +65,7 @@ class Field {
     uint32_t all_flags() const { return flags; }
 
   public:
-//    DISALLOW_COPY(Field);
+    DISALLOW_COPY(Field);
     Field(
         uint32_t length_arg,
         bool is_nullable_arg,

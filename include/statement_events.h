@@ -7,7 +7,7 @@
 
 #include "abstract_event.h"
 #include "constants.h"
-//#include "macros.h"
+#include "macros.h"
 
 class Query_event : public AbstractEvent {
   public:
@@ -194,7 +194,7 @@ class Query_event : public AbstractEvent {
 
     uint8_t default_table_encryption;
 
-//    DISALLOW_COPY(Query_event);
+    DISALLOW_COPY(Query_event);
     /**
       The constructor will be used while creating a Query_event, to be
       written to the binary log.

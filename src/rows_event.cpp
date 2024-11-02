@@ -6,17 +6,15 @@
 #include "abstract_event.h"
 #include "little_endian.h"
 
-//#include "logging.h"
+#include "logging.h"
 
-
-template <typename T, typename UT>
+template<typename T, typename UT>
 class Bit_stream_base {
   protected:
     T *m_ptr;
     uint m_current_bit;
 
   public:
-
     Bit_stream_base(T *ptr) : m_ptr(ptr), m_current_bit(0) {}
 
     /**
@@ -24,6 +22,7 @@ class Bit_stream_base {
       @param ptr Pointer where bits will be read or written.
     */
     void set_ptr(T *ptr) { m_ptr = ptr; }
+
     /**
       Set the buffer pointer, using an unsigned datatype.
       @param ptr Pointer where bits will be read or written.
@@ -32,7 +31,6 @@ class Bit_stream_base {
 
     /// @return the current position.
     uint tell() const { return m_current_bit; }
-
 };
 
 /*
@@ -41,6 +39,7 @@ class Bit_stream_base {
 class Bit_writer : public Bit_stream_base<char, uchar> {
   public:
     Bit_writer(char *ptr = nullptr) : Bit_stream_base<char, uchar>(ptr) {}
+
     Bit_writer(uchar *ptr) : Bit_writer((char *)ptr) {}
 
     /**
@@ -51,11 +50,12 @@ class Bit_writer : public Bit_stream_base<char, uchar> {
         uint byte = m_current_bit / 8;
         uint bit_within_byte = m_current_bit % 8;
         m_current_bit++;
-        if (bit_within_byte == 0)
-      m_ptr[byte] = set_to_on ? 1 : 0;
-    else if (set_to_on)
-      m_ptr[byte] |= 1 << bit_within_byte;
-  }
+        if (bit_within_byte == 0) {
+            m_ptr[byte] = set_to_on ? 1 : 0;
+        } else if (set_to_on) {
+            m_ptr[byte] |= 1 << bit_within_byte;
+        }
+    }
 };
 
 Table_map_event::Table_map_event(
@@ -65,7 +65,7 @@ Table_map_event::Table_map_event(
     size_t dblen,
     const char *tblnam,
     size_t tbllen,
-    std::vector<mysql::Field*>& column_view
+    std::vector<mysql::Field *> &column_view
 )
     : AbstractEvent(TABLE_MAP_EVENT)
     , m_table_id_(tid)
@@ -80,7 +80,6 @@ Table_map_event::Table_map_event(
     m_field_metadata_size_(0)
     , m_field_metadata_(nullptr)
     , m_null_bits_(nullptr) {
-
     if (dbnam) {
         m_dbnam_ = std::string(dbnam, m_dblen_);
     }
@@ -98,9 +97,9 @@ Table_map_event::Table_map_event(
     assert(static_cast<size_t>(tbuf_end - tbuf) <= sizeof(tbuf));
 
     m_data_size_ +=
-        m_dblen_ + 1 + (dbuf_end - dbuf);  // Include length and terminating \0
+        m_dblen_ + 1 + (dbuf_end - dbuf); // Include length and terminating \0
     m_data_size_ +=
-        m_tbllen_ + 1 + (tbuf_end - tbuf);  // Include length and terminating \0
+        m_tbllen_ + 1 + (tbuf_end - tbuf); // Include length and terminating \0
 
     // =========================m_column_view_ 初始化, 制作 表头==============
     // 1. 根据 tid 找 Table 对象, 实际上不用，因为现在 tid
@@ -111,25 +110,29 @@ Table_map_event::Table_map_event(
     long pos = 0;
     for (auto &field : m_column_view_) {
         m_coltype_[pos++] = field->binlog_type();
-//        LOG_INFO("init coltype_: field->binlog_type() = %d", field->binlog_type());
+        LOG_INFO(
+            "init coltype_: field->binlog_type() = %d", field->binlog_type()
+        );
     }
 
     uchar cbuf[sizeof(m_colcnt_) + 1];
     uchar *cbuf_end;
     cbuf_end = net_store_length(cbuf, (size_t)m_colcnt_);
     assert(static_cast<size_t>(cbuf_end - cbuf) <= sizeof(cbuf));
-    m_data_size_ += (cbuf_end - cbuf) + m_colcnt_;  // COLCNT and column types
+    m_data_size_ += (cbuf_end - cbuf) + m_colcnt_; // COLCNT and column types
 
     // 3. 得到每个 Field 的元数据
     m_field_metadata_ = static_cast<unsigned char *>(malloc(m_colcnt_ * 4));
     memset(m_field_metadata_, 0, m_colcnt_ * 4);
-    m_field_metadata_size_ = save_field_metadata(); // 同时也填充了 m_field_metadata_
-    if (m_field_metadata_size_ < 251)
+    m_field_metadata_size_ =
+        save_field_metadata(); // 同时也填充了 m_field_metadata_
+    if (m_field_metadata_size_ < 251) {
         m_data_size_ += m_field_metadata_size_ + 1;
-    else
+    } else {
         m_data_size_ += m_field_metadata_size_ + 3;
+    }
 
-/////////////////////////////
+    /////////////////////////////
     uint num_null_bytes = (m_colcnt_ + 7) / 8;
     m_data_size_ += num_null_bytes;
 
@@ -141,14 +144,13 @@ Table_map_event::Table_map_event(
         bit_writer.set(field->is_nullable());
     }
 
-//    LOG_INFO("table_map_event data size: %zu", m_data_size_);
+    LOG_INFO("table_map_event data size: %zu", m_data_size_);
 
     this->common_header_ = new EventCommonHeader();
-    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+    //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
 Table_map_event::~Table_map_event() = default;
-
 
 int Table_map_event::save_field_metadata() {
     int index = 0;
@@ -189,14 +191,14 @@ bool Table_map_event::write_data_body(Basic_ostream *ostream) {
     uchar mbuf[2 * sizeof(m_field_metadata_size_)];
     uchar *const mbuf_end = net_store_length(mbuf, m_field_metadata_size_);
 
-
-//    uchar *m_optional_metadata_ = new uchar[17];
-//    // 初始化数据
-//    uchar data[17] = {0x01, 0x02, 0x2D, 0x56, 0x02, 0x0B, 0xFC, 0xFF, 0x00,
-//                      0x05, 0x3F, 0x06, 0x3F, 0x07, 0x3F, 0x08, 0x3F};
-//    // 将数据复制到 m_optional_metadata_ 指向的内存中
-//    std::memcpy(m_optional_metadata_, data, 17);
-//    size_t m_optional_metadata_len = 17;
+    //    uchar *m_optional_metadata_ = new uchar[17];
+    //    // 初始化数据
+    //    uchar data[17] = {0x01, 0x02, 0x2D, 0x56, 0x02, 0x0B, 0xFC, 0xFF,
+    //    0x00,
+    //                      0x05, 0x3F, 0x06, 0x3F, 0x07, 0x3F, 0x08, 0x3F};
+    //    // 将数据复制到 m_optional_metadata_ 指向的内存中
+    //    std::memcpy(m_optional_metadata_, data, 17);
+    //    size_t m_optional_metadata_len = 17;
 
     return ostream->write(dbuf, (size_t)(dbuf_end - dbuf))
            && ostream->write((const uchar *)m_dbnam_.c_str(), m_dblen_ + 1)

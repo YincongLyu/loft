@@ -6,7 +6,7 @@
 #include "little_endian.h"
 #include "template_utils.h"
 
-// #include "logging.h"
+#include "logging.h"
 
 /******************************************************************************
                      Query_event methods
@@ -61,9 +61,7 @@ Query_event::Query_event(
     , default_collation_for_utf8mb4_number_(255)
     , sql_require_primary_key(0xff)
     , default_table_encryption(0xff) {
-
-
-    time_zone_str_ = "UTC";
+    time_zone_str_ = "SYSTEM";
     time_zone_len = strlen(time_zone_str_);
     if (db_arg == nullptr) {
         db_len_ = 0;
@@ -72,10 +70,10 @@ Query_event::Query_event(
     }
 
     catalog_len = db_len_;
-    //    LOG_INFO("db_len_ = %zu, query_len = %zu", db_len_, q_len_);
+    LOG_INFO("db_len_ = %zu, query_len = %zu", db_len_, q_len_);
 
     this->common_header_ = new EventCommonHeader();
-//    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+    //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
 /**

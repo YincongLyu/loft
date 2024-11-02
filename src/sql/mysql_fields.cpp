@@ -3,7 +3,8 @@
 //
 #include "mysql_fields.h"
 #include "little_endian.h"
-//#include "logging.h"
+
+#include "logging.h"
 
 namespace mysql {
 typedef int32_t decimal_digit_t;
@@ -102,7 +103,8 @@ Field_new_decimal::Field_new_decimal(
       ) {
     precision = std::min(
         len_arg,
-//        my_decimal_length_to_precision(len_arg, dec_arg, unsigned_arg),
+        //        my_decimal_length_to_precision(len_arg, dec_arg,
+        //        unsigned_arg),
         uint(DECIMAL_MAX_PRECISION)
     );
     assert((precision <= DECIMAL_MAX_PRECISION) && (dec <= DECIMAL_MAX_SCALE));
@@ -152,10 +154,10 @@ Field_str::Field_str(
 int Field_string::do_save_field_metadata(unsigned char *metadata_ptr) const {
     assert(field_length < 1024);
     assert((real_type() & 0xF0) == 0xF0);
-//    LOG_INFO("field_length: %u, real_type: %u", field_length, real_type());
+    LOG_INFO("field_length: %u, real_type: %u", field_length, real_type());
     *metadata_ptr = (real_type() ^ ((field_length & 0x300) >> 4)); // fe
-    *(metadata_ptr + 1) = field_length & 0xFF;  // 20
-//    *(metadata_ptr + 1) = 0x50;
+    *(metadata_ptr + 1) = field_length & 0xFF;                     // 20
+    //    *(metadata_ptr + 1) = 0x50;
     return 2;
 }
 
@@ -187,7 +189,7 @@ int Field_varstring::do_save_field_metadata(unsigned char *metadata_ptr) const {
 
 int Field_blob::do_save_field_metadata(unsigned char *metadata_ptr) const {
     *metadata_ptr = pack_length_no_ptr();
-//    LOG_INFO("metadata: %u (pack_length_no_ptr)", *metadata_ptr);
+    LOG_INFO("metadata: %u (pack_length_no_ptr)", *metadata_ptr);
     return 1;
 }
 
@@ -216,11 +218,11 @@ Field_bit::Field_bit(
     , bit_ofs(bit_ofs_arg)
     , bit_len(len_arg & 7)
     , bytes_in_rec(len_arg / 8) {
-//    LOG_INFO(
-//        "len_arg: %u, bit_len: "
-//        "%u, bytes_in_rec: %u",
-//        len_arg, bit_len, bytes_in_rec
-//    );
+    LOG_INFO(
+        "len_arg: %u, bit_len: "
+        "%u, bytes_in_rec: %u",
+        len_arg, bit_len, bytes_in_rec
+    );
 
     set_flag(UNSIGNED_FLAG);
 
@@ -230,7 +232,7 @@ Field_bit::Field_bit(
 }
 
 int Field_bit::do_save_field_metadata(unsigned char *metadata_ptr) const {
-//    LOG_INFO("bit_len: %d, bytes_in_rec: %d", bit_len, bytes_in_rec);
+    LOG_INFO("bit_len: %d, bytes_in_rec: %d", bit_len, bytes_in_rec);
     /*
       Since this class and Field_bit_as_char have different ideas of
       what should be stored here, we compute the values of the metadata
@@ -276,7 +278,8 @@ Field *make_field(
         bit_offset = null_bit;
         if (is_nullable) // if null field
         {
-            //            bit_ptr += (null_bit == 7); // shift bit_ptr and bit_offset
+            //            bit_ptr += (null_bit == 7); // shift bit_ptr and
+            //            bit_offset
             bit_offset = (bit_offset + 1) & 7;
         }
     }
@@ -293,11 +296,11 @@ Field *make_field(
     //        field_charset = &my_charset_numeric; skip
     //    }
 
-//    LOG_INFO(
-//        "field_type: %d, field_length: %zu, "
-//        "interval: %p",
-//        field_type, field_length, interval
-//    );
+    LOG_INFO(
+        "field_type: %d, field_length: %zu, "
+        "interval: %p",
+        field_type, field_length, interval
+    );
 
     /*
       FRMs from 3.23/4.0 can have strings with field_type == MYSQL_TYPE_DECIMAL.
@@ -326,7 +329,8 @@ Field *make_field(
             */
             uint pack_length = calc_pack_length(field_type, field_length)
                                - portable_sizeof_char_ptr;
-            // field_length 对于 text 和 blob 来说，传进来的都是0，那么 pack_lenggh
+            // field_length 对于 text 和 blob 来说，传进来的都是0，那么
+            // pack_lenggh
             switch (pack_length) {
                 case 1:
                     field_length = 255;
@@ -427,10 +431,10 @@ Field *make_field(
         case MYSQL_TYPE_TIME2:
         case MYSQL_TYPE_DATETIME2:
         case MYSQL_TYPE_NEWDATE:
-//            LOG_INFO(
-//                "Field type %d not impl, refer to 'enum_field_types' status code",
-//                field_type
-//            );
+            LOG_INFO(
+                "Field type %d not impl, refer to enum_field_types.h status code",
+                field_type
+            );
         default:
             break;
     }
@@ -529,17 +533,17 @@ size_t calc_pack_length(enum_field_types type, size_t length) {
 }
 
 unsigned int my_time_binary_length(unsigned int dec) {
-//    LOFT_ASSERT(dec <= DATETIME_MAX_DECIMALS, "time dec is too large");
+    LOFT_ASSERT(dec <= DATETIME_MAX_DECIMALS, "time dec is too large");
     return 3 + (dec + 1) / 2;
 }
 
 unsigned int my_datetime_binary_length(unsigned int dec) {
-//    LOFT_ASSERT(dec <= DATETIME_MAX_DECIMALS, "datetime dec is too large");
+    LOFT_ASSERT(dec <= DATETIME_MAX_DECIMALS, "datetime dec is toolarge");
     return 5 + (dec + 1) / 2;
 }
 
 unsigned int my_timestamp_binary_length(unsigned int dec) {
-//    LOFT_ASSERT(dec <= DATETIME_MAX_DECIMALS, "timestamp dec is too large");
+    LOFT_ASSERT(dec <= DATETIME_MAX_DECIMALS, "timestamp dec is toolarge");
     return 4 + (dec + 1) / 2;
 }
-}
+} // namespace mysql

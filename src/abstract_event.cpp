@@ -4,7 +4,7 @@
 // AbstractEvent.cpp
 #include "abstract_event.h"
 #include "little_endian.h"
-// #include "logging.h"
+#include "logging.h"
 
 // 即使是纯虚函数，也需要在 cpp 文件中定义析构函数
 AbstractEvent::~AbstractEvent() = default;
@@ -43,23 +43,21 @@ bool AbstractEvent::write_common_header(
     // 暂时不管 data_written_ 和 log_pos_
     common_header_->data_written_ = sizeof(header) + event_data_length;
     // TODO 先 给crc checksum 先算上位置，但不计算真实值
-//    common_header_->data_written_ += BINLOG_CHECKSUM_LEN;
+    //    common_header_->data_written_ += BINLOG_CHECKSUM_LEN;
     common_header_->log_pos_ =
         ostream->get_position() + common_header_->data_written_;
 
     write_common_header_to_memory(header);
 
-    //    LOG_INFO(
-    //        "current event common-header write pos: %llu",
-    //        ostream->get_position()
-    //    );
+    LOG_INFO(
+        "current event common-header write pos: %llu", ostream->get_position()
+    );
 
     return ostream->write(header, LOG_EVENT_HEADER_LEN);
 }
 
 bool AbstractEvent::write_common_footer(Basic_ostream *ostream) {
-    //    LOG_INFO("current event checksum write pos: %llu",
-    //    ostream->get_position());
+    LOG_INFO("current event checksum write pos: %llu", ostream->get_position());
 
     uchar buf[BINLOG_CHECKSUM_LEN];
     int4store(buf, 0); // 后续引入 crc32 计算

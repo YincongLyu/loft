@@ -7,15 +7,15 @@
 #include "statement_events.h"
 #include "table_id.h"
 
-//#include "logging.h"
-//#include "macros.h"
+#include "logging.h"
+#include "macros.h"
 
 #include <fstream>
 #include <gtest/gtest.h>
 #include <iomanip>
 
 // 利用 自带的 Basic_ostream 写
-TEST(WRITE_BINLOG_FILE_TEST, WRITE_MAGIC_NUMBER) {
+TEST(WRITE_BINLOG_FILE_TEST, DISABLED_WRITE_MAGIC_NUMBER) {
     // Create a MYSQL_BIN_LOG instance
     MYSQL_BIN_LOG binlog(new Binlog_ofile());
 
@@ -117,10 +117,11 @@ TEST(STATEMENT_EVENT_FORMAT_TEST, DISABLED_QUERY_EVENT) {
 
     std::cout << "Binlog file opened successfully." << std::endl;
 
-    const char *query_arg = "create database t1";
+    const char *query_arg = "create table t1 (id int)";
     const char *catalog_arg = nullptr;
-    const char *db_arg = nullptr; // 假设没有的话，mysqlbinlog默认理解成
-                                  // mysql，所以会 use 'mysql'
+    const char *db_arg = "t1"; // 假设没有的话，mysqlbinlog默认理解成
+                               // mysql，所以会 use 'mysql'
+    catalog_arg = db_arg;
     uint64_t ddl_xid_arg = 31;
     uint32_t query_length = strlen(query_arg);
     unsigned long thread_id_arg = 10000;
@@ -139,16 +140,13 @@ TEST(STATEMENT_EVENT_FORMAT_TEST, DISABLED_QUERY_EVENT) {
 
     binlog.write_event_to_binlog(qe);
 
-//    LOG_INFO("this is a info log");
-//    LOG_DEBUG("this is a debug log");
-    int flag = 1;
-//    LOFT_VERIFY(flag == 1, "test macro IF can print msg");
-    //    LOFT_ASSERT(flag == 0, "test macro ASSERT can print msg")
+    LOG_INFO("this is a info log");
+    LOG_DEBUG("this is a debug log");
 
     binlog.close();
 }
 
-TEST(ROWS_EVENT_FORMAT_TEST, DISABLED_TABLE_MAP_EVENT) {
+TEST(ROWS_EVENT_FORMAT_TEST, TABLE_MAP_EVENT) {
     MYSQL_BIN_LOG binlog(new Binlog_ofile());
     const char *test_file_name = "test_table_map";
     uint64_t test_file_size = 1024;

@@ -79,7 +79,7 @@ Format_description_event::Format_description_event(
     // AbstarctEvent 在写 common_header 时，会使用成员变量
     // type_code_，故先不填充没事
     this->common_header_ = new EventCommonHeader();
-//    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+    //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
 Format_description_event::~Format_description_event() = default;
@@ -89,7 +89,8 @@ bool Format_description_event::write(Basic_ostream *ostream) {
     // TODO 暂时写固定数据，先确定要写 哪些字段
 
     // fde 只有 post-header
-    size_t rec_size = AbstractEvent::FORMAT_DESCRIPTION_HEADER_LEN + BINLOG_CHECKSUM_ALG_DESC_LEN;
+    size_t rec_size = AbstractEvent::FORMAT_DESCRIPTION_HEADER_LEN
+                      + BINLOG_CHECKSUM_ALG_DESC_LEN;
     uchar buff[rec_size];
 
     int2store(buff + ST_BINLOG_VER_OFFSET, binlog_version_);
@@ -129,7 +130,7 @@ Previous_gtids_event::Previous_gtids_event(const Gtid_set *set)
     buf_ = buffer;
 
     this->common_header_ = new EventCommonHeader();
-//    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+    //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
 bool Previous_gtids_event::write(Basic_ostream *ostream) {
@@ -181,7 +182,7 @@ Gtid_event::Gtid_event(
              : Log_event_type::GTID_LOG_EVENT);
     this->type_code_ = event_type;
 
-//    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+    //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
 size_t Gtid_event::get_data_size() {
@@ -297,7 +298,7 @@ Xid_event::Xid_event(uint64_t xid_arg)
     : AbstractEvent(XID_EVENT)
     , xid_(xid_arg) {
     this->common_header_ = new EventCommonHeader();
-//    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+    //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
 bool Xid_event::write(Basic_ostream *ostream) {
@@ -324,7 +325,7 @@ Rotate_event::Rotate_event(
     , pos_(pos_arg) {   /* 4 byte */
 
     this->common_header_ = new EventCommonHeader();
-//    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+    //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
 bool Rotate_event::write(Basic_ostream *ostream) {

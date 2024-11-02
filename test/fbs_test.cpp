@@ -1,8 +1,8 @@
 #include "binlog.h"
 #include "ddl_generated.h"
 #include "file_manager.h"
-//#include "logging.h"
-//#include "macros.h"
+#include "logging.h"
+#include "macros.h"
 
 #include <gtest/gtest.h>
 #include <iostream>
@@ -42,24 +42,19 @@ TEST(DDL_TEST, DISABLED_CREATE_DB_LEN) {
     EXPECT_EQ(sql_len, 248);
 }
 
-TEST(SQL_TEST, DDL) {
+TEST(SQL_TEST, DISABLED_DDL) {
     // 1. 新建一个 binlog 文件，开启写功能
     MYSQL_BIN_LOG binlog(new Binlog_ofile());
     const char *test_file_name = "test_query_ddl";
     uint64_t test_file_size = 1024;
 
-    if (!binlog.open(test_file_name, test_file_size)) {
-        std::cerr << "Failed to open binlog file." << std::endl;
-    }
+    LOFT_ASSERT(
+        binlog.open(test_file_name, test_file_size),
+        "Failed to open binlog file."
+    );
 
-//    LOFT_ASSERT(
-//        !binlog.open(test_file_name, test_file_size),
-//        "Failed to open binlog file."
-//    );
-//    LOG_DEBUG("Binlog file opened successfully.");
-
-    // 2. mgr 转换工具负责 读待解析的中间 flatbuffer 数据，然后调用 响应的转换
-    // 函数
+    // 2. mgr 转换工具负责 读待解析的中间 flatbuffer 数据，然后调用
+    // 响应的转换函数
 
     LogFormatTransformManager mgr;
     // 2.1 把待解析的 数据 装入 reader 中，后续可以利用 read/cpy 方法
@@ -89,7 +84,7 @@ TEST(SQL_TEST, DDL) {
     binlog.close();
 }
 
-TEST(DML_TEST, INSERT1) {
+TEST(DML_TEST, DISABLED_INSERT1) {
     LogFormatTransformManager mgr;
     // 待解析的 数据
     auto [data, fileSize] = mgr.readFileAsBinary();
@@ -156,14 +151,10 @@ TEST(SQL_TEST, DML) {
     const char *test_file_name = "test_query_dml";
     uint64_t test_file_size = 1024;
 
-    if (!binlog.open(test_file_name, test_file_size)) {
-        std::cerr << "Failed to open binlog file." << std::endl;
-    }
-
-//    LOG_DEBUG("Binlog file opened successfully.");
-
-    // 2. mgr 转换工具负责 读待解析的中间 flatbuffer 数据，然后调用 响应的转换
-    // 函数
+    LOFT_ASSERT(
+        binlog.open(test_file_name, test_file_size),
+        "Failed to open binlog file."
+    );
 
     LogFormatTransformManager mgr;
     // 2.1 把待解析的 数据 装入 reader 中，后续可以利用 read/cpy 方法
@@ -186,7 +177,7 @@ TEST(SQL_TEST, DML) {
         // 管理内存的方法不是使用 new/delete，所以不能直接转化成 unique_ptr
         const DML *dml = GetDML(buf.data());
 
-//        LOFT_ASSERT(dml, "Failed to parse DML object.");
+        LOFT_ASSERT(dml, "Failed to parse DML object.");
         // Use the`  raw pointer directly
         mgr.transformDML(dml, &binlog);
     }

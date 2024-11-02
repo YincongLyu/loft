@@ -79,6 +79,7 @@ const uint64_t INVALID_XID = 0xffffffffffffffffULL;
 #define BINLOG_MAGIC_SIZE   4
 #define BIN_LOG_HEADER_SIZE 4U
 #define BINLOG_CHECKSUM_LEN 4
+#define BINLOG_CHECKSUM_ALG_DESC_LEN 1 /* 1 byte checksum alg descriptor */
 
 /** start event post-header (for v3 and v4) */
 #define ST_BINLOG_VER_OFFSET        0

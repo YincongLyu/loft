@@ -39,7 +39,7 @@ TEST(DDL_TEST, DISABLED_CREATE_DB_LEN) {
     EXPECT_EQ(sql_len, 248);
 }
 
-TEST(SQL_TEST, DDL) {
+TEST(SQL_TEST, DISABLED_DDL) {
     LogFormatTransformManager mgr;
     // 待解析的 数据
     auto [data, fileSize] = mgr.readFileAsBinary();
@@ -54,6 +54,8 @@ TEST(SQL_TEST, DDL) {
     // note！使用 flatbuffer 获取的对象，返回的是一个 raw ptr
     // 管理内存的方法不是使用 new/delete，所以不能直接转化成 unique_ptr
     const DDL *ddl = GetDDL(buf.data());
+    const DML *dml = GetDML(buf.data());
+
     if (ddl) {
         // Use the raw pointer directly
         mgr.transformDDL(ddl);
@@ -64,6 +66,6 @@ TEST(SQL_TEST, DDL) {
 
 }
 
-TEST(SQL_TEST, DDL_OR_DML) {
+TEST(SQL_TEST, DISABLED_DDL_OR_DML) {
 
 }

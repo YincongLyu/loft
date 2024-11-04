@@ -40,15 +40,16 @@ bool AbstractEvent::write_common_header(
     uchar header[LOG_EVENT_HEADER_LEN];
     // 暂时不管 data_written_ 和 log_pos_
     common_header_->data_written_ = sizeof(header) + event_data_length;
+
     // TODO 先 给crc checksum 先算上位置，但不计算真实值
     common_header_->data_written_ += BINLOG_CHECKSUM_LEN;
     common_header_->log_pos_ =
         ostream->get_position() + common_header_->data_written_;
-
     write_common_header_to_memory(header);
 
     std::cout << "current event common-header write pos: "
               << ostream->get_position() << std::endl;
+
     return ostream->write(header, LOG_EVENT_HEADER_LEN);
 }
 

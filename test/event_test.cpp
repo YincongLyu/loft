@@ -4,6 +4,7 @@
 #include "binlog.h"
 #include "control_events.h"
 #include "statement_events.h"
+#include "write_event.h"
 
 #include <fstream>
 #include <gtest/gtest.h>
@@ -51,86 +52,86 @@ TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_FORMAT_DESCRIPTION_EVENT) {
     binlog.close();
 }
 
-TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_OPEN_NEW_BINLOG) {
-    MYSQL_BIN_LOG binlog(new Binlog_ofile());
-    const char *test_file_name = "test_2_default_event";
-    uint64_t test_file_size = 1024;
+// TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_OPEN_NEW_BINLOG) {
+//     MYSQL_BIN_LOG binlog(new Binlog_ofile());
+//     const char *test_file_name = "test_2_default_event";
+//     uint64_t test_file_size = 1024;
 
-    if (!binlog.open(test_file_name, test_file_size)) {
-        std::cerr << "Failed to open binlog file." << std::endl;
-    }
+//     if (!binlog.open(test_file_name, test_file_size)) {
+//         std::cerr << "Failed to open binlog file." << std::endl;
+//     }
 
-    std::cout << "Binlog file opened successfully." << std::endl;
+//     std::cout << "Binlog file opened successfully." << std::endl;
 
-    Format_description_event fde(4, "8.0.26");
-    binlog.write_event_to_binlog(&fde);
+//     Format_description_event fde(4, "8.0.26");
+//     binlog.write_event_to_binlog(&fde);
 
-    std::cout << "write fde successfully." << std::endl;
-    const Gtid_set *gtid_set = new Gtid_set(new Sid_map());
-    Previous_gtids_event pge(gtid_set);
-    binlog.write_event_to_binlog(&pge);
+//     std::cout << "write fde successfully." << std::endl;
+//     const Gtid_set *gtid_set = new Gtid_set(new Sid_map());
+//     Previous_gtids_event pge(gtid_set);
+//     binlog.write_event_to_binlog(&pge);
 
-    binlog.close();
-}
+//     binlog.close();
+// }
 
-TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_GTID_EVENT) {
-    MYSQL_BIN_LOG binlog(new Binlog_ofile());
-    const char *test_file_name = "test_gtid";
-    uint64_t test_file_size = 1024;
+// TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_GTID_EVENT) {
+//     MYSQL_BIN_LOG binlog(new Binlog_ofile());
+//     const char *test_file_name = "test_gtid";
+//     uint64_t test_file_size = 1024;
 
-    if (!binlog.open(test_file_name, test_file_size)) {
-        std::cerr << "Failed to open binlog file." << std::endl;
-    }
+//     if (!binlog.open(test_file_name, test_file_size)) {
+//         std::cerr << "Failed to open binlog file." << std::endl;
+//     }
 
-    std::cout << "Binlog file opened successfully." << std::endl;
+//     std::cout << "Binlog file opened successfully." << std::endl;
 
-    long long int last_committed_arg = 30;
-    long long int sequence_number_arg = 31;
-    bool may_have_sbr_stmts_arg = true;
-    unsigned long long int original_commit_timestamp_arg = 1722493959000068;
-    unsigned long long int immediate_commit_timestamp_arg = 1722493961117679;
-    uint32_t original_server_version = 80026;
-    uint32_t imm_server_version = 80026;
-    Gtid_event ge(
-        last_committed_arg, sequence_number_arg, may_have_sbr_stmts_arg,
-        original_commit_timestamp_arg, immediate_commit_timestamp_arg,
-        original_server_version,  imm_server_version
-    );
-    binlog.write_event_to_binlog(&ge);
+//     long long int last_committed_arg = 30;
+//     long long int sequence_number_arg = 31;
+//     bool may_have_sbr_stmts_arg = true;
+//     unsigned long long int original_commit_timestamp_arg = 1722493959000068;
+//     unsigned long long int immediate_commit_timestamp_arg = 1722493961117679;
+//     uint32_t original_server_version = 80026;
+//     uint32_t imm_server_version = 80026;
+//     Gtid_event ge(
+//         last_committed_arg, sequence_number_arg, may_have_sbr_stmts_arg,
+//         original_commit_timestamp_arg, immediate_commit_timestamp_arg,
+//         original_server_version,  imm_server_version
+//     );
+//     binlog.write_event_to_binlog(&ge);
 
-    binlog.close();
-}
+//     binlog.close();
+// }
 
-TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_QUERY_EVENT) {
-    MYSQL_BIN_LOG binlog(new Binlog_ofile());
-    const char *test_file_name = "test_query";
-    uint64_t test_file_size = 1024;
+// TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_QUERY_EVENT) {
+//     MYSQL_BIN_LOG binlog(new Binlog_ofile());
+//     const char *test_file_name = "test_query";
+//     uint64_t test_file_size = 1024;
 
-    if (!binlog.open(test_file_name, test_file_size)) {
-        std::cerr << "Failed to open binlog file." << std::endl;
-    }
+//     if (!binlog.open(test_file_name, test_file_size)) {
+//         std::cerr << "Failed to open binlog file." << std::endl;
+//     }
 
-    std::cout << "Binlog file opened successfully." << std::endl;
+//     std::cout << "Binlog file opened successfully." << std::endl;
 
-    const char *query_arg = "create database t1";
-    const char *catalog_arg = nullptr;
-    const char *db_arg = nullptr; // 假设没有的话，mysqlbinlog默认理解成 mysql，所以会 use 'mysql'
-    uint32_t query_length = strlen(query_arg);
-    unsigned long thread_id_arg = 10000;
-    unsigned long long sql_mode_arg = 0; // 随意
-    unsigned long auto_increment_increment_arg = 0; // 随意
-    unsigned long auto_increment_offset_arg = 0; // 随意
-    unsigned int number = 0;  // 一定要
-    unsigned long long table_map_for_update_arg = 0; // 随意
-    int errcode = 0;
+//     const char *query_arg = "create database t1";
+//     const char *catalog_arg = nullptr;
+//     const char *db_arg = nullptr; // 假设没有的话，mysqlbinlog默认理解成 mysql，所以会 use 'mysql'
+//     uint32_t query_length = strlen(query_arg);
+//     unsigned long thread_id_arg = 10000;
+//     unsigned long long sql_mode_arg = 0; // 随意
+//     unsigned long auto_increment_increment_arg = 0; // 随意
+//     unsigned long auto_increment_offset_arg = 0; // 随意
+//     unsigned int number = 0;  // 一定要
+//     unsigned long long table_map_for_update_arg = 0; // 随意
+//     int errcode = 0;
 
-    Query_event* qe = new Query_event(query_arg, catalog_arg, db_arg, query_length, thread_id_arg, sql_mode_arg,
-                                      auto_increment_increment_arg, auto_increment_offset_arg, number, table_map_for_update_arg, errcode);
+//     Query_event* qe = new Query_event(query_arg, catalog_arg, db_arg, query_length, thread_id_arg, sql_mode_arg,
+//                                       auto_increment_increment_arg, auto_increment_offset_arg, number, table_map_for_update_arg, errcode);
 
-    binlog.write_event_to_binlog(qe);
+//     binlog.write_event_to_binlog(qe);
 
-    binlog.close();
-}
+//     binlog.close();
+// }
 
 TEST(EVENT_FORMAT_TEST, DISABLED_PRINT_BINARY_FILE_TO_HEX) {
     std::string filename = "test_magic_fde";
@@ -150,7 +151,6 @@ TEST(EVENT_FORMAT_TEST, DISABLED_PRINT_BINARY_FILE_TO_HEX) {
            > 0) {
         std::cout << std::hex << std::setfill('0') << std::setw(4)
                   << lineCount * 16 << ": ";
-
         for (int i = 0; i < bytesRead; ++i) {
             std::cout << std::setw(2) << static_cast<int>(buffer[i]) << ' ';
         }
@@ -158,6 +158,22 @@ TEST(EVENT_FORMAT_TEST, DISABLED_PRINT_BINARY_FILE_TO_HEX) {
         std::cout << std::endl;
         ++lineCount;
     }
-
     file.close();
+}
+
+TEST(EVENT_FORMAT_TEST, ROWS_EVENT) {
+    MYSQL_BIN_LOG binlog(new Binlog_ofile());
+    const char *test_file_name = "test_rows";
+    uint64_t test_file_size = 1024;
+    std::string str = "liweihao";
+    std::string type = "CHAR";
+
+    if (!binlog.open(test_file_name, test_file_size)) {
+        std::cerr << "Failed to open binlog file." << std::endl;
+    }
+    Rows_event row(103,1,1,Log_event_type::WRITE_ROWS_EVENT);
+    row.write_data_after(str.data(), type,(size_t)400,(size_t)str.size(),(int)0,(int)0);
+    row.set_dat_size2();
+    binlog.write_event_to_binlog(&row);
+    binlog.close();
 }

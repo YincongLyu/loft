@@ -174,6 +174,28 @@ TEST(ROWS_EVENT_FORMAT_TEST, TABLE_MAP_EVENT) {
     binlog.close();
 }
 
+TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_ROTATE_EVENT) {
+    MYSQL_BIN_LOG binlog(new Binlog_ofile());
+    const char *test_file_name = "test_rotate";
+    uint64_t test_file_size = 1024;
+
+    if (!binlog.open(test_file_name, test_file_size)) {
+        std::cerr << "Failed to open binlog file." << std::endl;
+    }
+
+    std::cout << "Binlog file opened successfully." << std::endl;
+
+
+    std::string next_binlog_file_name = "ON.000021";
+    Rotate_event* rotateEvent = new Rotate_event(next_binlog_file_name.c_str(), next_binlog_file_name.length(),
+                                                Rotate_event::DUP_NAME, 4);
+    binlog.write_event_to_binlog(rotateEvent);
+
+    binlog.close();
+
+}
+
+
 TEST(EVENT_FORMAT_TEST, DISABLED_PRINT_BINARY_FILE_TO_HEX) {
     std::string filename = "test_magic_fde";
     std::ifstream file(filename, std::ios::binary);

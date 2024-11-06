@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.17)
 
 # -- Configure project compiler options
 project(loft LANGUAGES C CXX)
@@ -22,8 +22,6 @@ if(NDEBUG)
         -DEVMONE_X86_64_ARCH_LEVEL=2
     )
 else()
-    add_compile_options(-fsanitize=address)
-    add_link_options(-fsanitize=address)
     add_compile_options(
         -O0 -ggdb -Werror -Wno-attributes
         -DPROJECT_VERSION=""

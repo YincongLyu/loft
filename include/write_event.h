@@ -6,47 +6,10 @@
 #include <algorithm>
 #include <little_endian.h>
 #include <abstract_event.h>
-#include "./binlogevents/table_id.h"
+#include "table_id.h"
 #include <string>
 #include "demical.h"
-
-enum enum_field_types {
-    MYSQL_TYPE_DECIMAL,
-    MYSQL_TYPE_TINY,
-    MYSQL_TYPE_SMALLINT,
-    MYSQL_TYPE_SHORT,
-    MYSQL_TYPE_LONG,
-    MYSQL_TYPE_FLOAT,
-    MYSQL_TYPE_DOUBLE,
-    MYSQL_TYPE_NULL,
-    MYSQL_TYPE_TIMESTAMP,
-    MYSQL_TYPE_LONGLONG,
-    MYSQL_TYPE_INT24,
-    MYSQL_TYPE_DATE,
-    MYSQL_TYPE_TIME,
-    MYSQL_TYPE_DATETIME,
-    MYSQL_TYPE_YEAR,
-    MYSQL_TYPE_NEWDATE, /**< Internal to MySQL. Not used in protocol */
-    MYSQL_TYPE_VARCHAR,
-    MYSQL_TYPE_BIT,
-    MYSQL_TYPE_TIMESTAMP2,
-    MYSQL_TYPE_DATETIME2,   /**< Internal to MySQL. Not used in protocol */
-    MYSQL_TYPE_TIME2,       /**< Internal to MySQL. Not used in protocol */
-    MYSQL_TYPE_TYPED_ARRAY, /**< Used for replication only */
-    MYSQL_TYPE_INVALID = 243,
-    MYSQL_TYPE_BOOL = 244, /**< Currently just a placeholder */
-    MYSQL_TYPE_JSON = 245,
-    MYSQL_TYPE_NEWDECIMAL = 246,
-    MYSQL_TYPE_ENUM = 247,
-    MYSQL_TYPE_SET = 248,
-    MYSQL_TYPE_TINY_BLOB = 249,
-    MYSQL_TYPE_MEDIUM_BLOB = 250,
-    MYSQL_TYPE_LONG_BLOB = 251,
-    MYSQL_TYPE_BLOB = 252,
-    MYSQL_TYPE_VAR_STRING = 253,
-    MYSQL_TYPE_STRING = 254,
-    MYSQL_TYPE_GEOMETRY = 255
-};
+#include "field_types.h"
 
 class Rows_event : public AbstractEvent{
 public :
@@ -59,19 +22,7 @@ public :
  void Set_width(unsigned long width) { m_width = width; }
 
   template<typename T>
-  void set_row_after_buf(T &row, size_t str_length) {
-
-    data_to_binary(m_rows_after_buf,row, data_size, str_length);
-
-  }
-
-  template<typename T>
-  void set_row_before_buf(T &row) {
-    data_to_binary(m_rows_before_buf,row, data_size);
-  }
-
-  template<typename T>
-  void data_to_binary(uint8_t* &buf, T *data, std::string &type_string, size_t length, size_t str_length,int precision, int frac) {
+  void data_to_binary(uint8_t* &buf, T *data, size_t &data_size, std::string &type_string, size_t length, size_t str_length,int precision, int frac) {
     enum_field_types type = f_types[type_string];
     switch (type)
     {
@@ -87,6 +38,27 @@ public :
       buf_resize(buf, data_size, data_size + small_byte);
       memcpy(buf + data_size, data, small_byte);
       data_size += small_byte;
+      break;
+    }
+    case enum_field_types::MYSQL_TYPE_INT :{   
+      size_t  int_byte = 4;
+      buf_resize(buf, data_size, data_size + int_byte);
+      memcpy(buf + data_size, data, int_byte);
+      data_size += int_byte;
+      break;
+    }
+    case enum_field_types::MYSQL_TYPE_BIGINT :{      
+      size_t  bigint_byte = 8;
+      buf_resize(buf, data_size, data_size + bigint_byte);
+      memcpy(buf + data_size, data, bigint_byte);
+      data_size += bigint_byte;
+      break;
+    }
+    case enum_field_types::MYSQL_TYPE_MEDIUMINT :{      
+      size_t  mediumint_byte = 3;
+      buf_resize(buf, data_size, data_size + mediumint_byte);
+      memcpy(buf + data_size, data, mediumint_byte);
+      data_size += mediumint_byte;
       break;
     }
     case enum_field_types::MYSQL_TYPE_FLOAT :{
@@ -196,7 +168,8 @@ public :
     memcpy(buf + data_size, data, bit_size);
     data_size += bit_size;
       break;
-    case enum_field_types::MYSQL_TYPE_STRING :
+    }
+    case enum_field_types::MYSQL_TYPE_STRING :{
       size_t char_size = 0;
       if(length > 255) {
         char_size = 2;
@@ -244,39 +217,71 @@ public :
   void cols_init() ;
 
   void bits_init();
-
-  void set_rows_after_exist(std::vector<int> &rows) {
-    this->rows_after_exist = rows;
+  /*
+    delete,update
+  */
+  void set_null_before(std::vector<bool> t) {
+    assert(t.size() == rows_before.size());
+    null_before = t;
   }
-
-  void set_rows_before_exist(std::vector<int> &rows) {
-    this->rows_before_exist = rows;
+  /*
+    insert,update
+  */
+  void set_null_after(std::vector<bool> t) {
+    assert(t.size() == rows_after.size());  
+    null_after = t;
   }
-
-  void set_rows_after(std::vector<int> &rows) {
-    this->rows_after = rows;
+  /*
+    insert,update
+  */
+  void set_rows_after(std::vector<int> rows) {
+    assert(rows.size() <= m_width);
+    this->rows_after = rows; 
   }
-
-  void set_rows_before(std::vector<int> &rows) {
+  /*
+    delete,update
+  */
+  void set_rows_before(std::vector<int> rows) {
+    assert(rows.size() <= m_width);
     this->rows_before= rows;
   }
   
-  void set_data_size1() {
-    data_size1 = data_size;
+
+  void calculate_event_size() {
+    size_t n = Get_N();
+    uchar sbuf[sizeof(m_width) + 1];
+    uchar *const sbuf_end = net_store_length(sbuf, (size_t)m_width);
+    event_size += ROWS_HEADER_LEN_V2 ;
+    event_size += data_size1;
+    event_size += data_size2;
+    event_size += (sbuf_end - sbuf);
+     if(m_type == Log_event_type::WRITE_ROWS_EVENT) {
+        event_size += n;
+        event_size += (rows_after.size() + 7) / 8;
+     }else if( m_type == Log_event_type::DELETE_ROWS_EVENT) {
+        event_size += n;
+        event_size += (rows_before.size() + 7) / 8;
+     }else if(m_type == Log_event_type::UPDATE_ROWS_EVENT) {
+        event_size += n;
+        event_size += (rows_before.size() + 7) / 8;
+        event_size += n;
+        event_size += (rows_after.size() + 7) / 8;
+     }
+     return ;
   }
 
-  void set_dat_size2() {
-    data_size2 = data_size - data_size1;
+  size_t get_event_size() {
+      return event_size;
   }
 
   template<typename T>
-  void write_data_before(T *data, std::string &type, size_t length, size_t str_length,int precision, int frac){
-    data_to_binary(m_rows_before_buf, data, type, length, str_length, precision, frac);
+  void write_data_before(T *data, std::string &type, size_t length = 0, size_t str_length = 0,int precision = 0, int frac = 0){
+    data_to_binary(m_rows_before_buf, data, data_size1, type, length, str_length, precision, frac);
   }
 
   template<typename T>
-  void write_data_after(T *data, std::string &type, size_t length, size_t str_length,int precision, int frac) {
-    data_to_binary(m_rows_after_buf, data, type, length, str_length, precision, frac);
+  void write_data_after(T *data, std::string &type, size_t length  = 0, size_t str_length = 0,int precision = 0, int frac = 0) {
+    data_to_binary(m_rows_after_buf, data, data_size2, type, length, str_length, precision, frac);
 }
   bool write(Basic_ostream *ostream) override;
   bool write_data_header(Basic_ostream *) override;
@@ -295,14 +300,17 @@ private :
   unsigned char* m_rows_after_buf;
   std::vector<int> rows_before;
   std::vector<int> rows_after;
-  std::vector<int> rows_after_exist;
-  std::vector<int> rows_before_exist;  
-  size_t data_size;
-  size_t data_size1;
-  size_t data_size2;
+  std::vector<bool> null_after;
+  std::vector<bool> null_before;
+  size_t data_size1 = 0;
+  size_t data_size2 = 0;
+  size_t  event_size = 0;
 
 
-  std::unordered_map<std::string, enum_field_types>  f_types = {
+std::unordered_map<std::string, enum_field_types>  f_types = {
+    {"INT", enum_field_types::MYSQL_TYPE_INT},
+    {"MEDIUMINT", enum_field_types::MYSQL_TYPE_MEDIUMINT},
+    {"BIGINT", enum_field_types::MYSQL_TYPE_BIGINT},
     {"DECIMAL", enum_field_types::MYSQL_TYPE_DECIMAL},
     {"TINYINT", enum_field_types::MYSQL_TYPE_TINY},
     {"SMALLINT", enum_field_types::MYSQL_TYPE_SMALLINT},

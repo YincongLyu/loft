@@ -10,7 +10,7 @@
 
 #include "logging.h"
 #include "macros.h"
->>>>>>> main
+
 
 #include <fstream>
 #include <gtest/gtest.h>
@@ -286,17 +286,28 @@ TEST(EVENT_FORMAT_TEST, DISABLED_PRINT_BINARY_FILE_TO_HEX) {
 
 TEST(EVENT_FORMAT_TEST, ROWS_EVENT) {
     MYSQL_BIN_LOG binlog(new Binlog_ofile());
+    std::vector<int> after_rows{2};
+    std::vector<int> before_rows{1};
+    std::vector<bool> before_null{false};
+    std::vector<bool> after_null{false};
     const char *test_file_name = "test_rows";
     uint64_t test_file_size = 1024;
     std::string str = "liweihao";
-    std::string type = "CHAR";
-
+    int num = 2;
+    std::string type = "INT";
+    std::string type2 = "CHAR";
     if (!binlog.open(test_file_name, test_file_size)) {
         std::cerr << "Failed to open binlog file." << std::endl;
     }
-    Rows_event row(103,1,1,Log_event_type::WRITE_ROWS_EVENT);
-    row.write_data_after(str.data(), type,(size_t)400,(size_t)str.size(),(int)0,(int)0);
-    row.set_dat_size2();
+    Rows_event row(103,27,1,Log_event_type::UPDATE_ROWS_EVENT);
+    row.set_rows_before(before_rows);
+    row.set_rows_after(after_rows);
+    row.set_null_after(after_null);
+    row.set_null_before(before_null);
+    row.write_data_after(str.data(),type2,80,str.size());
+    row.write_data_before(&num, type);
+    Format_description_event fde(4, "8.0.26");
+    binlog.write_event_to_binlog(&fde);
     binlog.write_event_to_binlog(&row);
     binlog.close();
 }

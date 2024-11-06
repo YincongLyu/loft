@@ -50,6 +50,10 @@ extern "C" {
       Column types for MySQL
     */
     enum enum_field_types {
+        MYSQL_TYPE_SMALLINT,
+        MYSQL_TYPE_INT,
+        MYSQL_TYPE_BIGINT,
+        MYSQL_TYPE_MEDIUMINT,
         MYSQL_TYPE_DECIMAL,
         MYSQL_TYPE_TINY,
         MYSQL_TYPE_SHORT,

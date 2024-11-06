@@ -1,16 +1,14 @@
 #include "write_event.h"
 
 Rows_event::Rows_event(uint64_t id, unsigned long wid,uint16_t flag, Log_event_type type): m_table_id(id), m_type(type), AbstractEvent(type){
-    data_size = 0;
     data_size1 = 0;
     data_size2 = 0;
     this->Set_width(wid);
     this->Set_flags(flag);
     cols_init();
-    bits_init();
+    //bits_init();
 
     this->common_header_ = new EventCommonHeader();
-   
     this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
@@ -25,7 +23,7 @@ void Rows_event::cols_init() {
     memset(columns_before_image, 0xff, N * sizeof(uchar));
 }
 
-void Rows_event::bits_init()  {
+void Rows_event::bits_init() {
     int N = Get_N();
     row_bitmap_after = (uchar *)malloc(N * sizeof(uchar));
     memset(row_bitmap_after, 0x00, N * sizeof(uchar));
@@ -33,23 +31,23 @@ void Rows_event::bits_init()  {
       int n = Get_N() - (i/8 + 1);
       set_N_bit(*(row_bitmap_after+n),  i%8 + 1);
     }
-
     row_bitmap_before = (uchar *)malloc(N * sizeof(uchar));
     memset(row_bitmap_before, 0x00, N * sizeof(uchar));
     for(int i = 0; i < m_width; i++) {
       int n = Get_N() - (i/8 + 1);
       set_N_bit(*(row_bitmap_before+n),  i%8 + 1);
     }
-  }
+}
 
 bool  Rows_event::write_data_header(Basic_ostream *ostream) {
-    uchar   buf[10];
-    int4store(buf + ROWS_MAPID_OFFSET, m_table_id.id());
+    uchar   buf[ROWS_HEADER_LEN_V2];
+    int4store(buf + ROWS_MAPID_OFFSET, m_table_id.get_id());
     int2store(buf + ROWS_FLAGS_OFFSET, m_flags);
     uint extra_row_info_payloadlen = EXTRA_ROW_INFO_HEADER_LENGTH;
     int2store(buf + ROWS_VHLEN_OFFSET, extra_row_info_payloadlen);
-    return ostream->write(buf,10);
+    return ostream->write(buf,ROWS_HEADER_LEN_V2);
 }
+
 
 bool Rows_event::write_data_body(Basic_ostream *ostream) {
     bool res = true;
@@ -58,52 +56,74 @@ bool Rows_event::write_data_body(Basic_ostream *ostream) {
     res &= ostream->write(sbuf, sbuf_end - sbuf);
 
     if(m_type == Log_event_type::UPDATE_ROWS_EVENT || m_type == Log_event_type::DELETE_ROWS_EVENT) {
-      if(rows_before.size() != 0)      memset(columns_before_image, 0, Get_N() * sizeof(uchar));
+      int N =  Get_N();
+      if(rows_before.size() != 0)      memset(columns_before_image, 0,N * sizeof(uchar));
       for(int i = 0; i < rows_before.size(); i++) {
-        int n = Get_N() - ((rows_before[i]-1)/8 + 1);
-        clear_N_bit(*(columns_before_image+n), (rows_before[i]-1)%8 + 1);
+        assert(rows_before[i] <= m_width);
+        int n = N - ((rows_before[i]-1)/8 + 1);
+        set_N_bit(*(columns_before_image+n), (rows_before[i]-1)%8 + 1);
       }
-      if(rows_before.size() != 0)         memcpy(row_bitmap_before, columns_before_image, Get_N() * sizeof(uchar));
-      std::reverse(columns_before_image, columns_before_image + Get_N());
-      res &= ostream->write(columns_before_image, Get_N());
+      if(rows_before.size() != 0) {
+        row_bitmap_before = (uchar *)malloc(((rows_before.size() + 7) /8) * sizeof(uchar));
+        memset(row_bitmap_before, 0x00, ((rows_before.size() + 7) /8) * sizeof(uchar));
+      }
+      std::reverse(columns_before_image, columns_before_image + N);
+      res &= ostream->write(columns_before_image, N);
     }
 
-    if(m_type == Log_event_type::UPDATE_ROWS_EVENT || m_type == Log_event_type::WRITE_ROWS_EVENT) {
-      if(rows_after.size() != 0)      memset(columns_after_image, 0, Get_N() * sizeof(uchar));
+    if(m_type == Log_event_type::UPDATE_ROWS_EVENT || m_type == Log_event_type::WRITE_ROWS_EVENT) {  
+      int N =  Get_N();
+      if(rows_after.size() != 0)      memset(columns_after_image, 0, N * sizeof(uchar));
       for(int i = 0; i < rows_after.size(); i++) {
-        int n = Get_N() - ((rows_after[i] - 1)/8 + 1);
+        assert(rows_after[i] <= m_width);
+        int n = N - ((rows_after[i] - 1)/8 + 1);
         set_N_bit(*(columns_after_image+n), (rows_after[i] - 1)%8 + 1);
       }
-      if(rows_after.size() != 0)         memcpy(row_bitmap_after, columns_after_image, Get_N() * sizeof(uchar));
-      std::reverse(columns_after_image, columns_after_image + Get_N());
-      res &= ostream->write(columns_after_image, Get_N());
+      if(rows_after.size() != 0)   {
+        row_bitmap_after = (uchar *)malloc(((rows_after.size() + 7) /8) * sizeof(uchar));
+        memset(row_bitmap_after, 0x00, ((rows_after.size() + 7) /8) * sizeof(uchar));
+      }
+      std::reverse(columns_after_image, columns_after_image + N);
+      res &= ostream->write(columns_after_image, N);
     }
 
     if(m_type == Log_event_type::UPDATE_ROWS_EVENT || m_type == Log_event_type::DELETE_ROWS_EVENT) {
-      for(int i = 0; i < rows_before_exist.size(); i++) {
-        int n = Get_N() - ((rows_before_exist[i]-1)/8 + 1);
-        clear_N_bit(*(row_bitmap_before+n), (rows_before_exist[i] - 1)%8 + 1);
-      }   
-      res &= ostream->write(row_bitmap_before, Get_N());
+      int N = (rows_before.size() + 7) /8;
+      for(int i = 0; i < null_before.size(); i++) {
+        if(null_before[i]) { 
+            int n = N - (i/8 + 1);
+            set_N_bit(*(row_bitmap_before+n), i%8 + 1);
+        }
+      }
+      std::reverse(row_bitmap_before, row_bitmap_before + N);
+      res &= ostream->write(row_bitmap_before, N);
       res &= ostream->write(m_rows_before_buf, data_size1);
     }
+
     if(m_type == Log_event_type::UPDATE_ROWS_EVENT || m_type == Log_event_type::WRITE_ROWS_EVENT) {
-      for(int i = 0; i < rows_after_exist.size(); i++) {
-        int n = Get_N() - ((rows_after_exist[i]-1)/8 + 1);
-        clear_N_bit(*(row_bitmap_after+n), (rows_after_exist[i] - 1)%8 + 1);
-      }   
-      res &= ostream->write(row_bitmap_after, Get_N());
+      int N = (rows_after.size() + 7) / 8;
+      for(int i = 0; i < null_after.size(); i++) {
+        if(null_after[i]) {
+          int n = N - (i/8 + 1);
+          set_N_bit(*(row_bitmap_after+n), i%8 + 1);
+        }
+      }
+      std::reverse(row_bitmap_after, row_bitmap_after + N);
+      res &= ostream->write(row_bitmap_after, N);
       res &= ostream->write(m_rows_after_buf, data_size2);
     }
     return res;
 }
 
 bool Rows_event::write(Basic_ostream *ostream) {
-    return AbstractEvent::write(ostream);
+    calculate_event_size();
+                 return
+            write_common_header(ostream, get_event_size())
+            && write_data_header(ostream) && write_data_body(ostream);
 }
 
-void Rows_event::buf_resize(uint8_t* &buf, size_t size1, size_t size2){
-  if(data_size == 0) {
+void Rows_event::buf_resize(uint8_t* &buf, size_t size1, size_t size2) {
+  if(size1 == 0) {
     buf = (uchar *)malloc(size2 * sizeof(uchar));
     return ;
   }
@@ -127,7 +147,7 @@ void Rows_event::double2demi(double num, decimal_t &t, int precision, int frac) 
   int j = 0;
   for(int i = 0; i < frac; i++)  frac1 *= 10;
   fracg = frac1;
-  while(fracg <= 99999999) fracg *= 10;
+  while(fracg <= 99999999 && fracg != 0) fracg *= 10;
   while(intg) {
     buf[j++] = intg % 1000000000;
     intg /= 1000000000;

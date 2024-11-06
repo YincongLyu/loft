@@ -84,77 +84,77 @@ TEST(SQL_TEST, DISABLED_DDL) {
     binlog.close();
 }
 
-TEST(DML_TEST, DISABLED_INSERT1) {
-    LogFormatTransformManager mgr;
-    // 待解析的 数据
-    auto [data, fileSize] = mgr.readFileAsBinary();
-    auto reader = std::make_unique<MyReader>(data.get(), fileSize);
-    // 跳过前 2 条
-    reader->forward(
-        sizeof(uint32_t) * 2 + SQL_SIZE_ARRAY[0] + SQL_SIZE_ARRAY[1]
-    );
+// TEST(DML_TEST, DISABLED_INSERT1) {
+//     LogFormatTransformManager mgr;
+//     // 待解析的 数据
+//     auto [data, fileSize] = mgr.readFileAsBinary();
+//     auto reader = std::make_unique<MyReader>(data.get(), fileSize);
+//     // 跳过前 2 条
+//     reader->forward(
+//         sizeof(uint32_t) * 2 + SQL_SIZE_ARRAY[0] + SQL_SIZE_ARRAY[1]
+//     );
 
-    auto sql_len = reader->read<uint32_t>();
+//     auto sql_len = reader->read<uint32_t>();
 
-    EXPECT_EQ(sql_len, 3304);
+//     EXPECT_EQ(sql_len, 3304);
 
-    std::vector<unsigned char> buf(sql_len);
-    reader->memcpy<unsigned char *>(buf.data(), sql_len);
-    // note！使用 flatbuffer 获取的对象，返回的是一个 raw ptr
-    // 管理内存的方法不是使用 new/delete，所以不能直接转化成 unique_ptr
-    const DDL *ddl = GetDDL(buf.data());
-    const DML *dml = GetDML(buf.data());
+//     std::vector<unsigned char> buf(sql_len);
+//     reader->memcpy<unsigned char *>(buf.data(), sql_len);
+//     // note！使用 flatbuffer 获取的对象，返回的是一个 raw ptr
+//     // 管理内存的方法不是使用 new/delete，所以不能直接转化成 unique_ptr
+//     const DDL *ddl = GetDDL(buf.data());
+//     const DML *dml = GetDML(buf.data());
 
-    if (ddl) {
-        // Use the raw pointer directly
-        mgr.transformDDL(ddl);
-    } else {
-        // Handle error cases
-        std::cerr << "Failed to parse DDL object.\n";
+//     if (ddl) {
+//         // Use the raw pointer directly
+//         mgr.transformDDL(ddl, binlog);
+//     } else {
+//         // Handle error cases
+//         std::cerr << "Failed to parse DDL object.\n";
 
-    const DML *dml = GetDML(buf.data());
-    // ************* 填数据 begin ************************
-    auto dbName = dml->db_name();
-    EXPECT_EQ(std::strcmp(dbName->c_str(), "t1"), 0);
+//     const DML *dml = GetDML(buf.data());
+//     // ************* 填数据 begin ************************
+//     auto dbName = dml->db_name();
+//     EXPECT_EQ(std::strcmp(dbName->c_str(), "t1"), 0);
 
-    auto fields = dml->fields();
-    EXPECT_EQ(fields->size(), 27);
+//     auto fields = dml->fields();
+//     EXPECT_EQ(fields->size(), 27);
 
-    std::vector<std::unique_ptr<Field>> field_vec;
-    for (const auto &field : *fields) {
-        field->name();
-        auto fieldMeta = field->meta();
-        fieldMeta->length();
-        fieldMeta->is_unsigned();
-        fieldMeta->nullable();
-        fieldMeta->data_type(); // 根据 这里的类型，构建 对应的 Field 对象
-        fieldMeta->precision();
-    }
+//     std::vector<std::unique_ptr<Field>> field_vec;
+//     for (const auto &field : *fields) {
+//         field->name();
+//         auto fieldMeta = field->meta();
+//         fieldMeta->length();
+//         fieldMeta->is_unsigned();
+//         fieldMeta->nullable();
+//         fieldMeta->data_type(); // 根据 这里的类型，构建 对应的 Field 对象
+//         fieldMeta->precision();
+//     }
 
-    // insert 没有 keys 要判断一下
-    auto keys = dml->keys();
-    if (keys) {
-        std::cout << "insert sql not comes here" << std::endl;
-    }
+//     // insert 没有 keys 要判断一下
+//     auto keys = dml->keys();
+//     if (keys) {
+//         std::cout << "insert sql not comes here" << std::endl;
+//     }
 
-    auto lastCommit = dml->last_commit();
-    EXPECT_EQ(lastCommit, 33);
+//     auto lastCommit = dml->last_commit();
+//     EXPECT_EQ(lastCommit, 33);
 
-    auto immediateCommitTs = dml->msg_time();
+//     auto immediateCommitTs = dml->msg_time();
 
-    auto newData = dml->new_data();
+//     auto newData = dml->new_data();
 
-    auto opType = dml->op_type();
-    EXPECT_EQ(std::strcmp(opType->c_str(), "I"), 0);
+//     auto opType = dml->op_type();
+//     EXPECT_EQ(std::strcmp(opType->c_str(), "I"), 0);
 
-    auto table = dml->table_();
-    EXPECT_EQ(std::strcmp(table->c_str(), "t1"), 0);
+//     auto table = dml->table_();
+//     EXPECT_EQ(std::strcmp(table->c_str(), "t1"), 0);
 
-    auto seqNo = dml->tx_seq();
-    EXPECT_EQ(seqNo, 35);
+//     auto seqNo = dml->tx_seq();
+//     EXPECT_EQ(seqNo, 35);
 
-    auto originalCommitTs = dml->tx_time();
-}
+//     auto originalCommitTs = dml->tx_time();
+// }
 
 TEST(SQL_TEST, DML) {
     // 1. 新建一个 binlog 文件，开启写功能

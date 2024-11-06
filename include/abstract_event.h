@@ -216,7 +216,7 @@ class AbstractEvent {
         return
             write_common_header(ostream, get_data_size())
             && write_data_header(ostream) && write_data_body(ostream);
-
+        
     }
 
     /*

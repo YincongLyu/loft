@@ -3,8 +3,11 @@
 //
 #include "statement_events.h"
 #include "abstract_event.h"
-#include "template_utils.h"
 #include "little_endian.h"
+#include "template_utils.h"
+
+#include "logging.h"
+
 /******************************************************************************
                      Query_event methods
 ******************************************************************************/
@@ -30,7 +33,7 @@ Query_event::Query_event(
     : AbstractEvent(QUERY_EVENT)
     , query_(query_arg)
     , db_(db_arg)
-    ,ddl_xid(ddl_xid_arg)
+    , ddl_xid(ddl_xid_arg)
     , catalog_(catalog_arg)
     , user_(nullptr)
     , user_len_(0)
@@ -55,18 +58,22 @@ Query_event::Query_event(
     , table_map_for_update(table_map_for_update_arg)
     , explicit_defaults_ts(TERNARY_UNSET)
     , mts_accessed_dbs(0)
-    , default_collation_for_utf8mb4_number_(0)
+    , default_collation_for_utf8mb4_number_(255)
     , sql_require_primary_key(0xff)
     , default_table_encryption(0xff) {
-
-    default_collation_for_utf8mb4_number_ = p_default_collation_for_utf8mb4_number_;
-    if (db_arg == nullptr)
+    time_zone_str_ = "SYSTEM";
+    time_zone_len = strlen(time_zone_str_);
+    if (db_arg == nullptr) {
         db_len_ = 0;
-    else
+    } else {
         db_len_ = strlen(db_arg);
+    }
+
+    catalog_len = db_len_;
+    LOG_INFO("db_len_ = %zu, query_len = %zu", db_len_, q_len_);
 
     this->common_header_ = new EventCommonHeader();
-    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+    //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
 /**
@@ -111,7 +118,7 @@ bool Query_event::write(Basic_ostream *ostream) {
     */
     int4store(buf + Q_THREAD_ID_OFFSET, slave_proxy_id_);
     int4store(buf + Q_EXEC_TIME_OFFSET, exec_time_);
-    buf[Q_DB_LEN_OFFSET] = (char)db_len_;
+    buf[Q_DB_LEN_OFFSET] = (unsigned char)db_len_;
     int2store(buf + Q_ERR_CODE_OFFSET, error_code_);
 
     /*
@@ -120,6 +127,11 @@ bool Query_event::write(Basic_ostream *ostream) {
       knows.
     */
     start_of_status = start = buf + AbstractEvent::QUERY_HEADER_LEN;
+
+    //    if (ddl_xid == INVALID_XID) {
+    //        goto cal_status_var;
+    //    }
+
     if (flags2_inited) {
         *start++ = Q_FLAGS2_CODE;
         int4store(start, flags2);
@@ -130,6 +142,12 @@ bool Query_event::write(Basic_ostream *ostream) {
         int8store(start, sql_mode);
         start += 8;
     }
+    if (catalog_len) // i.e. this var is inited (false for 4.0 events)
+    {
+        write_str_with_code_and_len(
+            &start, catalog_, catalog_len, Q_CATALOG_NZ_CODE
+        );
+    }
 
     if (auto_increment_increment != 1 || auto_increment_offset != 1) {
         *start++ = Q_AUTO_INCREMENT;
@@ -139,7 +157,13 @@ bool Query_event::write(Basic_ostream *ostream) {
     }
     if (charset_inited) {
         *start++ = Q_CHARSET_CODE;
-        memcpy(start, charset, 6);
+        // 使用标准的字符集ID
+        int2store(start, client_charset_); // 比如 utf8mb4 = 45
+        int2store(
+            start + 2, connection_collation_
+        );                                       // 比如 utf8mb4_general_ci = 45
+        int2store(start + 4, server_collation_); // 服务器默认字符集排序规则
+        //        memcpy(start, charset, 6);
         start += 6;
     }
     if (time_zone_len) {
@@ -166,17 +190,50 @@ bool Query_event::write(Basic_ostream *ostream) {
         int8store(start, table_map_for_update);
         start += 8;
     }
+
+    if (need_binlog_invoker_) {
+        LEX_CSTRING invoker_user{nullptr, 0};
+        LEX_CSTRING invoker_host{nullptr, 0};
+        memset(&invoker_user, 0, sizeof(invoker_user));
+        memset(&invoker_host, 0, sizeof(invoker_host));
+
+        invoker_user = get_invoker_user();
+        invoker_host = get_invoker_host();
+
+        *start++ = Q_INVOKER;
+
+        /*
+          Store user length and user. The max length of use is 16, so 1 byte is
+          enough to store the user's length.
+         */
+        *start++ = (uchar)invoker_user.length;
+        memcpy(start, invoker_user.str, invoker_user.length);
+        start += invoker_user.length;
+
+        /*
+          Store host length and host. The max length of host is 255, so 1 byte
+          is enough to store the host's length.
+         */
+        *start++ = (uchar)invoker_host.length;
+        if (invoker_host.length > 0) {
+            memcpy(start, invoker_host.str, invoker_host.length);
+        }
+        start += invoker_host.length;
+    }
+
     // *****************db name ******************
 
     if (db_ != nullptr) {
         *start++ = Q_UPDATED_DB_NAMES;
-        uchar dbs = 1;
-        *start++ = dbs;  // 写入数据库数量，现指定为1，实际上要从外边读入
-        const char* db_name = db_;
+        uchar dbs = 254;
+        *start++ = dbs; // 写入数据库数量，现指定为1，实际上要从外边读入
+        const char *db_name = db_;
         strcpy((char *)start, db_name);
-        start += strlen(db_name) + 1; // 写入数据库名，并在末尾添加 '\0' 作为结束符
+        start +=
+            strlen(db_name) + 1; // 写入数据库名，并在末尾添加 '\0' 作为结束符
     } else {
-        *start++ = '\0'; // 空数据库，只能是 create db
+        *start++ = 254; // 空数据库，只能是 create db，
+                        // 默认填充OVER_MAX_DBS_IN_EVENT_MTS
     }
 
     // 强制记录 时间戳
@@ -199,20 +256,27 @@ bool Query_event::write(Basic_ostream *ostream) {
         start += 2;
     }
 
+    //    goto cal_status_var;
+
+    // cal_status_var:
     /* Store length of status variables */
-    status_vars_len_ = (uint)(start - start_of_status);
+    status_vars_len_ = static_cast<uint>(start - start_of_status);
     assert(status_vars_len_ <= MAX_SIZE_LOG_EVENT_STATUS);
     int2store(buf + Q_STATUS_VARS_LEN_OFFSET, status_vars_len_);
 
     /*
       get_post_header_size_for_derived() 不考虑 load event
     */
-    event_length = (uint)(start - buf) + db_len_ + 1 + q_len_;
 
-    return write_common_header(ostream, event_length) &&
-            ostream->write((uchar *)buf, AbstractEvent::QUERY_HEADER_LEN) &&
-            ostream->write(start_of_status, (uint)(start - start_of_status)) &&
-            ostream->write(db_ ? pointer_cast<const uchar *>(db_) : pointer_cast<const uchar *>(""), db_len_ + 1) &&
-            ostream->write(pointer_cast<const uchar *>(query_), q_len_) &&
-            write_common_footer(ostream);
+    event_length = static_cast<uint>(start - buf) + db_len_ + 1 + q_len_;
+
+    return write_common_header(ostream, event_length)
+           && ostream->write((uchar *)buf, AbstractEvent::QUERY_HEADER_LEN)
+           && ostream->write(start_of_status, (uint)(start - start_of_status))
+           && ostream->write(
+               db_ ? pointer_cast<const uchar *>(db_)
+                   : pointer_cast<const uchar *>(""),
+               db_len_ + 1
+           )
+           && ostream->write(pointer_cast<const uchar *>(query_), q_len_);
 }

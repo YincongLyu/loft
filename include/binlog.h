@@ -60,6 +60,9 @@ class MYSQL_BIN_LOG : TC_LOG {
     //********************* common file operation *************************
     bool open(const char *file_name, uint64_t file_size) override; // 构造函数
     void close() override;                                         // 析构函数
+    void flush() {
+        m_binlog_file_->flush();
+    }
 
     // 告诉编译器，这个变量很重要
     [[nodiscard]]

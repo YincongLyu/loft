@@ -4,6 +4,7 @@
 // AbstractEvent.cpp
 #include "abstract_event.h"
 #include "little_endian.h"
+#include "logging.h"
 
 // 即使是纯虚函数，也需要在 cpp 文件中定义析构函数
 AbstractEvent::~AbstractEvent() = default;
@@ -16,10 +17,11 @@ unsigned long AbstractEvent::get_time() {
 }
 
 uint32_t AbstractEvent::write_common_header_to_memory(uchar *buf) {
-    // TODO 暂时用系统时间，填充 实际上是外界读入的
-    ulong timestamp = (ulong)get_time();
-
-    int4store(buf, timestamp);
+    // TODO 暂时用系统时间，填充 实际上是 commit time 去掉微秒
+    //    ulong timestamp = (ulong)get_time();
+    //
+    //    int4store(buf, timestamp);
+    int4store(buf, 1722493961);
     buf[EVENT_TYPE_OFFSET] = type_code_;
     int4store(buf + SERVER_ID_OFFSET, server_id_);
     int4store(
@@ -42,22 +44,22 @@ bool AbstractEvent::write_common_header(
     common_header_->data_written_ = sizeof(header) + event_data_length;
 
     // TODO 先 给crc checksum 先算上位置，但不计算真实值
-    common_header_->data_written_ += BINLOG_CHECKSUM_LEN;
+    //    common_header_->data_written_ += BINLOG_CHECKSUM_LEN;
     common_header_->log_pos_ =
         ostream->get_position() + common_header_->data_written_;
     write_common_header_to_memory(header);
 
-    std::cout << "current event common-header write pos: "
-              << ostream->get_position() << std::endl;
+    LOG_INFO(
+        "current event common-header write pos: %llu", ostream->get_position()
+    );
 
     return ostream->write(header, LOG_EVENT_HEADER_LEN);
 }
 
 bool AbstractEvent::write_common_footer(Basic_ostream *ostream) {
-    std::cout << "current event checksum write pos: " << ostream->get_position()
-              << std::endl;
+    LOG_INFO("current event checksum write pos: %llu", ostream->get_position());
 
     uchar buf[BINLOG_CHECKSUM_LEN];
-    int4store(buf, 0);
+    int4store(buf, 0); // 后续引入 crc32 计算
     return ostream->write(buf, sizeof(buf));
 }

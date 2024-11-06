@@ -1,5 +1,7 @@
 #include "control_events.h"
 #include "little_endian.h"
+// #include "logging.h"
+// #include "macros.h"
 #include <iostream>
 
 /**************************************************************************
@@ -77,7 +79,7 @@ Format_description_event::Format_description_event(
     // AbstarctEvent 在写 common_header 时，会使用成员变量
     // type_code_，故先不填充没事
     this->common_header_ = new EventCommonHeader();
-    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+    //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
 Format_description_event::~Format_description_event() = default;
@@ -87,7 +89,8 @@ bool Format_description_event::write(Basic_ostream *ostream) {
     // TODO 暂时写固定数据，先确定要写 哪些字段
 
     // fde 只有 post-header
-    size_t rec_size = AbstractEvent::FORMAT_DESCRIPTION_HEADER_LEN;
+    size_t rec_size = AbstractEvent::FORMAT_DESCRIPTION_HEADER_LEN
+                      + BINLOG_CHECKSUM_ALG_DESC_LEN;
     uchar buff[rec_size];
 
     int2store(buff + ST_BINLOG_VER_OFFSET, binlog_version_);
@@ -107,8 +110,10 @@ bool Format_description_event::write(Basic_ostream *ostream) {
         &post_header_len_.front(), number_of_events
     );
 
+    buff[FORMAT_DESCRIPTION_HEADER_LEN] = (uint8_t)BINLOG_CHECKSUM_ALG_OFF;
+
     return write_common_header(ostream, rec_size)
-           && ostream->write(buff, rec_size) && write_common_footer(ostream);
+           && ostream->write(buff, rec_size);
 }
 
 /**************************************************************************
@@ -125,13 +130,13 @@ Previous_gtids_event::Previous_gtids_event(const Gtid_set *set)
     buf_ = buffer;
 
     this->common_header_ = new EventCommonHeader();
-    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+    //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
 bool Previous_gtids_event::write(Basic_ostream *ostream) {
     // 无 post-header
     return write_common_header(ostream, get_data_size())
-           && write_data_body(ostream) && write_common_footer(ostream);
+           && write_data_body(ostream);
 }
 
 bool Previous_gtids_event::write_data_body(Basic_ostream *ostream) {
@@ -177,7 +182,7 @@ Gtid_event::Gtid_event(
              : Log_event_type::GTID_LOG_EVENT);
     this->type_code_ = event_type;
 
-    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+    //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
 size_t Gtid_event::get_data_size() {
@@ -205,7 +210,7 @@ uint32_t Gtid_event::write_post_header_to_memory(uchar *buffer) {
     *ptr_buffer = LOGICAL_TIMESTAMP_TYPECODE;
     ptr_buffer += LOGICAL_TIMESTAMP_TYPECODE_LENGTH; // 1 byte
 
-    int8store(ptr_buffer, last_committed_); // 8 byte
+    int8store(ptr_buffer, last_committed_);      // 8 byte
     int8store(ptr_buffer + 8, sequence_number_); // 8 byte
     ptr_buffer += LOGICAL_TIMESTAMP_LENGTH;
 
@@ -243,7 +248,8 @@ uint32_t Gtid_event::write_body_to_memory(uchar *buffer) {
         ptr_buffer += ORIGINAL_COMMIT_TIMESTAMP_LENGTH;
     }
 
-    // Write the transaction length information, 即使 txn_len = 0, 也会占一个 byte
+    // Write the transaction length information, 即使 txn_len = 0, 也会占一个
+    // byte
     uchar *ptr_after_length = net_store_length(ptr_buffer, transaction_length_);
     ptr_buffer = ptr_after_length;
 
@@ -272,7 +278,9 @@ bool Gtid_event::write_data_body(Basic_ostream *ostream) {
     uchar buffer[MAX_DATA_LENGTH];
     uint32_t len = write_body_to_memory(buffer);
 
-    std::cout << "gtid_event_data_body len: " << len <<std::endl; // 7 + 7 + 1 + 4 = 19 byte
+    //    LOFT_VERIFY(
+    //        len == 19, "empty gtid event data body len is not correct"
+    //    ); // 7 + 7 + 1 + 4 = 19 byte
 
     return ostream->write((uchar *)buffer, len);
 }
@@ -286,47 +294,46 @@ Gtid_event::~Gtid_event() = default;
 /**************************************************************************
         Xid_event methods
 **************************************************************************/
-Xid_event::Xid_event(uint64_t xid_arg)  : AbstractEvent(XID_EVENT)
+Xid_event::Xid_event(uint64_t xid_arg)
+    : AbstractEvent(XID_EVENT)
     , xid_(xid_arg) {
-
     this->common_header_ = new EventCommonHeader();
-    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+    //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
 bool Xid_event::write(Basic_ostream *ostream) {
-    return write_common_header(ostream, get_data_size()) &&
-                   ostream->write((uchar *)&xid_, sizeof(xid_)) &&
-                   write_common_footer(ostream);
+    return write_common_header(ostream, get_data_size())
+           && ostream->write((uchar *)&xid_, sizeof(xid_));
 }
-
 
 /**************************************************************************
         Rotate_event methods
 **************************************************************************/
 
-
 // FIXME 现在是直接把 pos = 4，如果前一个文件空间不足，直接忽略文件后面的部分
 
-Rotate_event::Rotate_event(const char *new_log_ident_arg, size_t ident_len_arg,
-             unsigned int flags_arg, uint64_t pos_arg
+Rotate_event::Rotate_event(
+    const char *new_log_ident_arg,
+    size_t ident_len_arg,
+    unsigned int flags_arg,
+    uint64_t pos_arg
 )
     : AbstractEvent(ROTATE_EVENT)
     , new_log_ident_(new_log_ident_arg)
     , ident_len_(ident_len_arg ? ident_len_arg : strlen(new_log_ident_arg))
     , flags_(flags_arg) /* DUP_NAME */
-    , pos_(pos_arg) { /* 4 byte */
+    , pos_(pos_arg) {   /* 4 byte */
 
     this->common_header_ = new EventCommonHeader();
-    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
+    //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
 bool Rotate_event::write(Basic_ostream *ostream) {
     uchar buf[AbstractEvent::ROTATE_HEADER_LEN];
     int8store(buf + R_POS_OFFSET, pos_);
-    return
-        write_common_header(ostream, get_data_size()) &&
-        ostream->write((uchar *)buf,AbstractEvent::ROTATE_HEADER_LEN) &&
-        ostream->write(pointer_cast<const uchar *>(new_log_ident_), (uint)ident_len_) &&
-        write_common_footer(ostream);
+    return write_common_header(ostream, get_data_size())
+           && ostream->write((uchar *)buf, AbstractEvent::ROTATE_HEADER_LEN)
+           && ostream->write(
+               pointer_cast<const uchar *>(new_log_ident_), (uint)ident_len_
+           );
 }
-

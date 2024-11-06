@@ -47,9 +47,7 @@ class Sid_map {
   public:
     Sid_map() : sidno_to_sid_map_(), sid_to_sidno_map_() {}
 
-    ~Sid_map() {
-        clear();
-    }
+    ~Sid_map() { clear(); }
 
     enum_return_status clear() {
         sid_to_sidno_map_.clear();
@@ -253,7 +251,7 @@ class Gtid_set {
     /**
     Encodes this Gtid_set as a binary string.
   */
-    void encode(unsigned char* buf) const;
+    void encode(unsigned char *buf) const;
 
     /**
         Returns the length of this Gtid_set when encoded using the

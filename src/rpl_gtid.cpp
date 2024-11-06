@@ -46,8 +46,6 @@ int format_gno(char *s, rpl_gno gno) {
     return static_cast<int>(longlong10_to_str(gno, s, 10) - s);
 }
 
-
-
 /**************************************************************************
         Gtid methods
 **************************************************************************/
@@ -217,11 +215,10 @@ size_t Gtid_set::get_encoded_length() const {
     return ret;
 }
 
-void Gtid_set::encode(unsigned char* buf) const {
-
-  // make place for number of sids
+void Gtid_set::encode(unsigned char *buf) const {
+    // make place for number of sids
     uint64_t n_sids = 0;
-    unsigned char* n_sids_p = buf;
+    unsigned char *n_sids_p = buf;
     buf += 8;
     // store number of sids
     int8store(n_sids_p, n_sids);

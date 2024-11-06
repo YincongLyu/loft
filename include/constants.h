@@ -36,23 +36,22 @@ constexpr const size_t IO_SIZE{4096};
 #define BINLOG_VERSION    4
 #define ST_SERVER_VER_LEN 50
 
-
-#define MAX_SIZE_LOG_EVENT_STATUS                                             \
-  (1U + 4 /* type, flags2 */ + 1U + 8 /* type, sql_mode */ + 1U + 1 +         \
-   255 /* type, length, catalog */ + 1U + 4 /* type, auto_increment */ + 1U + \
-   6 /* type, charset */ + 1U + 1 +                                           \
-   MAX_TIME_ZONE_NAME_LENGTH /* type, length, time_zone */ + 1U +             \
-   2 /* type, lc_time_names_number */ + 1U +                                  \
-   2 /* type, charset_database_number */ + 1U +                               \
-   8 /* type, table_map_for_update */ + 1U + 1 +                              \
-   32 * 3 /* type, user_len, user */ + 1 + 255 /* host_len, host */           \
-   + 1U + 1 +                                                                 \
-   (MAX_DBS_IN_EVENT_MTS * (1 + NAME_LEN)) /* type, db_1, db_2, ... */        \
-   + 1U + 3 /* type, microseconds */ + 1U + 1 /* type, explicit_def..ts*/ +   \
-   1U + 8 /* type, xid of DDL */ + 1U +                                       \
-   2 /* type, default_collation_for_utf8mb4_number */ + 1U +                  \
-   1 /* sql_require_primary_key */ + 1U +                                     \
-   1 /* type, default_table_encryption */)
+#define MAX_SIZE_LOG_EVENT_STATUS                                          \
+    (1U + 4 /* type, flags2 */ + 1U + 8 /* type, sql_mode */ + 1U + 1      \
+     + 255 /* type, length, catalog */ + 1U                                \
+     + 4 /* type, auto_increment */ + 1U + 6 /* type, charset */ + 1U + 1  \
+     + MAX_TIME_ZONE_NAME_LENGTH /* type, length, time_zone */ + 1U        \
+     + 2 /* type, lc_time_names_number */ + 1U                             \
+     + 2 /* type, charset_database_number */ + 1U                          \
+     + 8 /* type, table_map_for_update */ + 1U + 1                         \
+     + 32 * 3 /* type, user_len, user */ + 1 + 255 /* host_len, host */    \
+     + 1U + 1                                                              \
+     + (MAX_DBS_IN_EVENT_MTS * (1 + NAME_LEN)) /* type, db_1, db_2, ... */ \
+     + 1U + 3 /* type, microseconds */ + 1U                                \
+     + 1 /* type, explicit_def..ts*/ + 1U + 8 /* type, xid of DDL */ + 1U  \
+     + 2 /* type, default_collation_for_utf8mb4_number */ + 1U             \
+     + 1 /* sql_require_primary_key */ + 1U                                \
+     + 1 /* type, default_table_encryption */)
 
 /**
   Maximum length of time zone name that we support (Time zone name is
@@ -67,7 +66,6 @@ constexpr const size_t IO_SIZE{4096};
 */
 #define OVER_MAX_DBS_IN_EVENT_MTS 254
 
-
 /**
    Query-log-event 最大的可以更改的 dbs 数量
 */
@@ -81,6 +79,7 @@ const uint64_t INVALID_XID = 0xffffffffffffffffULL;
 #define BINLOG_MAGIC_SIZE   4
 #define BIN_LOG_HEADER_SIZE 4U
 #define BINLOG_CHECKSUM_LEN 4
+#define BINLOG_CHECKSUM_ALG_DESC_LEN 1 /* 1 byte checksum alg descriptor */
 
 /** start event post-header (for v3 and v4) */
 #define ST_BINLOG_VER_OFFSET        0
@@ -110,7 +109,6 @@ const uint64_t INVALID_XID = 0xffffffffffffffffULL;
 
 #define MYSQL_DATA_HOME "./";
 
-
 struct MYSQL_LEX_CSTRING {
     const char *str;
     size_t length;
@@ -118,8 +116,8 @@ struct MYSQL_LEX_CSTRING {
 typedef struct MYSQL_LEX_CSTRING LEX_CSTRING;
 
 constexpr int INT_OFFSET = 4;
-constexpr int SQL_SIZE_ARRAY[] = {248,  744,  3304, 3208, 3208,
-                                  2040, 2040, 1968, 264,  224};
+constexpr size_t SQL_SIZE_ARRAY[] = {248,  744,  3304, 3208, 3208,
+                                     2040, 2040, 1968, 264,  224};
 
 } // namespace loft
 

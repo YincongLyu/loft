@@ -7,6 +7,7 @@
 
 #include "abstract_event.h"
 #include "constants.h"
+#include "macros.h"
 
 class Query_event : public AbstractEvent {
   public:
@@ -136,13 +137,13 @@ class Query_event : public AbstractEvent {
     */
     bool flags2_inited;
     bool sql_mode_inited;
-    bool charset_inited;
+    bool charset_inited = true; // 三个编码集有关
 
     uint32_t flags2;
     /* In connections sql_mode is 32 bits now but will be 64 bits soon */
     uint64_t sql_mode;
     uint16_t auto_increment_increment, auto_increment_offset;
-    char charset[6];
+    //    char charset[6];
     size_t time_zone_len; /* 0 means uninited */
     /*
       Binlog format 3 and 4 start to differ (as far as class members are
@@ -172,6 +173,12 @@ class Query_event : public AbstractEvent {
         TERNARY_ON
     } explicit_defaults_ts;
 
+    // 在类的成员变量中定义
+    uint16_t client_charset_ = 45; // 默认可以设置为33 (utf8mb4)
+    uint16_t connection_collation_ =
+        255; // MySQL 8.0 默认 (utf8mb4_general_ci) utf8mb4_0900_ai_ci
+    uint16_t server_collation_ = 255; // 默认可以设置为255 utf8mb4_0900_ai_ci
+
     /*
       number of updated databases by the query and their names. This info
       is requested by both Coordinator and Worker.
@@ -187,7 +194,7 @@ class Query_event : public AbstractEvent {
 
     uint8_t default_table_encryption;
 
-
+    DISALLOW_COPY(Query_event);
     /**
       The constructor will be used while creating a Query_event, to be
       written to the binary log.

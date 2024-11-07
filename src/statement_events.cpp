@@ -61,15 +61,18 @@ Query_event::Query_event(
     , default_collation_for_utf8mb4_number_(255)
     , sql_require_primary_key(0xff)
     , default_table_encryption(0xff) {
-    time_zone_str_ = "SYSTEM";
-    time_zone_len = strlen(time_zone_str_);
+
+//    time_zone_str_ = TIME_ZONE;
+//    time_zone_len = strlen(time_zone_str_);
     if (db_arg == nullptr) {
         db_len_ = 0;
     } else {
         db_len_ = strlen(db_arg);
     }
 
-    catalog_len = db_len_;
+//    catalog_len = db_len_;
+    catalog_len = 0;
+    query_exec_time_ = EXEC_TIME;
     LOG_INFO("db_len_ = %zu, query_len = %zu", db_len_, q_len_);
 
     this->common_header_ = new EventCommonHeader();
@@ -116,8 +119,8 @@ bool Query_event::write(Basic_ostream *ostream) {
         thread id 的设置和 session 有关，又和 create 临时表有关
         这里不用考虑
     */
-    int4store(buf + Q_THREAD_ID_OFFSET, slave_proxy_id_);
-    int4store(buf + Q_EXEC_TIME_OFFSET, exec_time_);
+    int4store(buf + Q_THREAD_ID_OFFSET, thread_id_);
+    int4store(buf + Q_EXEC_TIME_OFFSET, query_exec_time_);
     buf[Q_DB_LEN_OFFSET] = (unsigned char)db_len_;
     int2store(buf + Q_ERR_CODE_OFFSET, error_code_);
 
@@ -128,9 +131,9 @@ bool Query_event::write(Basic_ostream *ostream) {
     */
     start_of_status = start = buf + AbstractEvent::QUERY_HEADER_LEN;
 
-    //    if (ddl_xid == INVALID_XID) {
-    //        goto cal_status_var;
-    //    }
+    if (ddl_xid == INVALID_XID) {
+        goto cal_status_var;
+    }
 
     if (flags2_inited) {
         *start++ = Q_FLAGS2_CODE;
@@ -191,35 +194,35 @@ bool Query_event::write(Basic_ostream *ostream) {
         start += 8;
     }
 
-    if (need_binlog_invoker_) {
-        LEX_CSTRING invoker_user{nullptr, 0};
-        LEX_CSTRING invoker_host{nullptr, 0};
-        memset(&invoker_user, 0, sizeof(invoker_user));
-        memset(&invoker_host, 0, sizeof(invoker_host));
-
-        invoker_user = get_invoker_user();
-        invoker_host = get_invoker_host();
-
-        *start++ = Q_INVOKER;
-
-        /*
-          Store user length and user. The max length of use is 16, so 1 byte is
-          enough to store the user's length.
-         */
-        *start++ = (uchar)invoker_user.length;
-        memcpy(start, invoker_user.str, invoker_user.length);
-        start += invoker_user.length;
-
-        /*
-          Store host length and host. The max length of host is 255, so 1 byte
-          is enough to store the host's length.
-         */
-        *start++ = (uchar)invoker_host.length;
-        if (invoker_host.length > 0) {
-            memcpy(start, invoker_host.str, invoker_host.length);
-        }
-        start += invoker_host.length;
-    }
+//    if (need_binlog_invoker_) {
+//        LEX_CSTRING invoker_user{nullptr, 0};
+//        LEX_CSTRING invoker_host{nullptr, 0};
+//        memset(&invoker_user, 0, sizeof(invoker_user));
+//        memset(&invoker_host, 0, sizeof(invoker_host));
+//
+//        invoker_user = get_invoker_user();
+//        invoker_host = get_invoker_host();
+//
+//        *start++ = Q_INVOKER;
+//
+//        /*
+//          Store user length and user. The max length of use is 16, so 1 byte is
+//          enough to store the user's length.
+//         */
+//        *start++ = (uchar)invoker_user.length;
+//        memcpy(start, invoker_user.str, invoker_user.length);
+//        start += invoker_user.length;
+//
+//        /*
+//          Store host length and host. The max length of host is 255, so 1 byte
+//          is enough to store the host's length.
+//         */
+//        *start++ = (uchar)invoker_host.length;
+//        if (invoker_host.length > 0) {
+//            memcpy(start, invoker_host.str, invoker_host.length);
+//        }
+//        start += invoker_host.length;
+//    }
 
     // *****************db name ******************
 
@@ -256,9 +259,9 @@ bool Query_event::write(Basic_ostream *ostream) {
         start += 2;
     }
 
-    //    goto cal_status_var;
+    goto cal_status_var;
 
-    // cal_status_var:
+cal_status_var:
     /* Store length of status variables */
     status_vars_len_ = static_cast<uint>(start - start_of_status);
     assert(status_vars_len_ <= MAX_SIZE_LOG_EVENT_STATUS);

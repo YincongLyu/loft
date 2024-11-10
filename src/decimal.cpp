@@ -3,8 +3,8 @@
 
 int decimal2bin(const decimal_t *from, uchar *to, int precision, int frac) {
     dec1 mask = from->sign ? -1 : 0, *buf1 = from->buf, *stop1;
-    int error = 0, intg = precision - frac, isize1, intg1, intg1x,
-        from_intg, intg0 = intg / DIG_PER_DEC1, frac0 = frac / DIG_PER_DEC1,
+    int error = 0, intg = precision - frac, isize1, intg1, intg1x, from_intg,
+        intg0 = intg / DIG_PER_DEC1, frac0 = frac / DIG_PER_DEC1,
         intg0x = intg - intg0 * DIG_PER_DEC1,
         frac0x = frac - frac0 * DIG_PER_DEC1, frac1 = from->frac / DIG_PER_DEC1,
         frac1x = from->frac - frac1 * DIG_PER_DEC1,
@@ -33,8 +33,10 @@ int decimal2bin(const decimal_t *from, uchar *to, int precision, int frac) {
         intg1x = intg0x;
         error = E_DEC_OVERFLOW;
     } else if (isize0 > isize1) {
-        while (isize0-- > isize1) *to++ = (char)mask;
-  }
+        while (isize0-- > isize1) {
+            *to++ = (char)mask;
+        }
+    }
     if (fsize0 < fsize1) {
         frac1 = frac0;
         frac1x = frac0x;
@@ -81,9 +83,12 @@ int decimal2bin(const decimal_t *from, uchar *to, int precision, int frac) {
     /* frac1x part */
     if (frac1x) {
         dec1 x;
-        int i = dig2bytes[frac1x], lim = (frac1 < frac0 ? DIG_PER_DEC1 : frac0x);
-        while (frac1x < lim && dig2bytes[frac1x] == i) frac1x++;
-    x = div_by_pow10(*buf1, DIG_PER_DEC1 - frac1x) ^ mask;
+        int i = dig2bytes[frac1x],
+            lim = (frac1 < frac0 ? DIG_PER_DEC1 : frac0x);
+        while (frac1x < lim && dig2bytes[frac1x] == i) {
+            frac1x++;
+        }
+        x = div_by_pow10(*buf1, DIG_PER_DEC1 - frac1x) ^ mask;
         switch (i) {
             case 1:
                 mi_int1store(to, x);
@@ -105,8 +110,10 @@ int decimal2bin(const decimal_t *from, uchar *to, int precision, int frac) {
     if (fsize0 > fsize1) {
         uchar *to_end = orig_to + orig_fsize0 + orig_isize0;
 
-        while (fsize0-- > fsize1 && to < to_end) *to++ = (uchar)mask;
-  }
+        while (fsize0-- > fsize1 && to < to_end) {
+            *to++ = (uchar)mask;
+        }
+    }
     orig_to[0] ^= 0x80;
 
     /* Check that we have written the whole decimal and nothing more */

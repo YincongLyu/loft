@@ -250,9 +250,9 @@ struct CHARSET_INFO {
 
 struct TYPELIB {               /* Different types saved here */
     size_t count{0};           /* How many types */
-    const char *name{nullptr}; /* Name of typelib */
-    const char **type_names{nullptr};
-    unsigned int *type_lengths{nullptr};
+//    const char *name{nullptr}; /* Name of typelib */
+//    const char **type_names{nullptr};   没使用直接注释掉，否则还要考虑 delete 内存
+//    unsigned int *type_lengths{nullptr};
 
 };
 

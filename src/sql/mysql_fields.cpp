@@ -3,11 +3,11 @@
 //
 #include "mysql_fields.h"
 #include "little_endian.h"
+#include <memory>
 
 #include "logging.h"
 
 namespace mysql {
-
 
 // 压根就没走这个函数？直接用 length 存了，反而觉得 05 08 和 05 09 是对的
 inline uint
@@ -60,7 +60,7 @@ Field::Field(
     if (!is_nullable()) {
         set_flag(NOT_NULL_FLAG);
     }
-//    m_field_index = 0;
+    //    m_field_index = 0;
 }
 
 /**
@@ -102,8 +102,9 @@ Field_new_decimal::Field_new_decimal(
         //        unsigned_arg),
         uint(DECIMAL_MAX_PRECISION)
     );
-//    assert((precision <= DECIMAL_MAX_PRECISION) && (dec <= DECIMAL_MAX_SCALE));
-//    bin_size = my_decimal_get_binary_size(precision, dec);
+    //    assert((precision <= DECIMAL_MAX_PRECISION) && (dec <=
+    //    DECIMAL_MAX_SCALE)); bin_size = my_decimal_get_binary_size(precision,
+    //    dec);
 }
 
 // 精度存在第一个 byte 中，小数位存在 第二个 byte 中
@@ -151,8 +152,8 @@ int Field_string::do_save_field_metadata(unsigned char *metadata_ptr) const {
     assert((real_type() & 0xF0) == 0xF0);
     LOG_INFO("field_length: %u, real_type: %u", field_length, real_type());
     *metadata_ptr = (real_type() ^ ((field_length & 0x300) >> 4)); // fe
-    *(metadata_ptr + 1) = (field_length * 4) & 0xFF;                     // 20
-//    *(metadata_ptr + 1) = 0x50;
+    *(metadata_ptr + 1) = (field_length * 4) & 0xFF;               // 20
+    //    *(metadata_ptr + 1) = 0x50;
     return 2;
 }
 
@@ -255,16 +256,16 @@ Field_timestamp::Field_timestamp(
     set_flag(UNSIGNED_FLAG);
 }
 
-Field *make_field(
+auto make_field(
     const char *field_name,
     size_t field_length,
     bool is_unsigned,
     bool is_nullable,
     size_t null_bit, /* 怎么考虑初始化？*/
     enum_field_types field_type,
-    TYPELIB *interval,
+    int interval_count,
     uint decimals
-) {
+) -> FieldRef {
     //    uchar *bit_ptr = nullptr;
     uchar bit_offset = 0;
 
@@ -305,11 +306,11 @@ Field *make_field(
     switch (field_type) {
         case MYSQL_TYPE_VAR_STRING:
         case MYSQL_TYPE_STRING:
-            return new Field_string(
+            return std::make_shared<Field_string>(
                 field_length, is_nullable, null_bit, field_name
             );
         case MYSQL_TYPE_VARCHAR:
-            return new Field_varstring(
+            return std::make_shared<Field_varstring>(
                 field_length, HA_VARCHAR_PACKLENGTH(field_length), is_nullable,
                 null_bit, field_name
             );
@@ -340,7 +341,7 @@ Field *make_field(
                     field_length = 4294967295;
                     break;
             }
-            return new Field_blob(
+            return std::make_shared<Field_blob>(
                 field_length, is_nullable, null_bit, field_name, true
             );
         }
@@ -348,76 +349,82 @@ Field *make_field(
             uint pack_length = calc_pack_length(field_type, field_length)
                                - portable_sizeof_char_ptr;
 
-            return new Field_json(
+            return std::make_shared<Field_json>(
                 field_length, is_nullable, null_bit, field_name, pack_length
             );
         }
         case MYSQL_TYPE_ENUM:
-            assert(interval);
-            return new Field_enum(
+            assert(interval_count != 0);
+            return std::make_shared<Field_enum>(
                 field_length, is_nullable, null_bit, field_name,
-                get_enum_pack_length(interval->count), interval
+                get_enum_pack_length(interval_count)
             );
         case MYSQL_TYPE_SET:
-            assert(interval);
-            return new Field_set(
+            assert(interval_count != 0);
+            return std::make_shared<Field_set>(
                 field_length, is_nullable, null_bit, field_name,
-                get_set_pack_length(interval->count), interval
+                get_set_pack_length(interval_count)
             );
         case MYSQL_TYPE_DECIMAL: // never
-            return new Field_decimal(
+            return std::make_shared<Field_decimal>(
                 field_length, is_nullable, null_bit, field_name, decimals,
                 is_unsigned
             );
         case MYSQL_TYPE_NEWDECIMAL:
-            return new Field_new_decimal(
+            return std::make_shared<Field_new_decimal>(
                 field_length, is_nullable, null_bit, field_name, decimals,
                 is_unsigned
             );
         case MYSQL_TYPE_FLOAT:
-            return new Field_float(
+            return std::make_shared<Field_float>(
                 field_length, is_nullable, null_bit, field_name, decimals,
                 is_unsigned
             );
         case MYSQL_TYPE_DOUBLE:
-            return new Field_double(
+            return std::make_shared<Field_double>(
                 field_length, is_nullable, null_bit, field_name, decimals,
                 is_unsigned
             );
         case MYSQL_TYPE_TINY:
-            return new Field_tiny(
+            return std::make_shared<Field_tiny>(
                 field_length, is_nullable, null_bit, field_name, is_unsigned
             );
         case MYSQL_TYPE_SHORT:
-            return new Field_short(
+            return std::make_shared<Field_short>(
                 field_length, is_nullable, null_bit, field_name, is_unsigned
             );
         case MYSQL_TYPE_INT24:
-            return new Field_medium(
+            return std::make_shared<Field_medium>(
                 field_length, is_nullable, null_bit, field_name, is_unsigned
             );
         case MYSQL_TYPE_LONG:
-            return new Field_long(
+            return std::make_shared<Field_long>(
                 field_length, is_nullable, null_bit, field_name, is_unsigned
             );
         case MYSQL_TYPE_LONGLONG:
-            return new Field_longlong(
+            return std::make_shared<Field_longlong>(
                 field_length, is_nullable, null_bit, field_name, is_unsigned
             );
         case MYSQL_TYPE_YEAR:
-            return new Field_year(is_nullable, null_bit, field_name);
+            return std::make_shared<Field_year>(
+                is_nullable, null_bit, field_name
+            );
         case MYSQL_TYPE_TIMESTAMP:
-            return new Field_timestamp(
+            return std::make_shared<Field_timestamp>(
                 field_length, is_nullable, null_bit, field_name
             );
         case MYSQL_TYPE_TIME:
-            return new Field_time(is_nullable, null_bit, field_name);
+            return std::make_shared<Field_time>(
+                is_nullable, null_bit, field_name
+            );
         case MYSQL_TYPE_DATETIME:
-            return new Field_datetime(is_nullable, null_bit, field_name);
+            return std::make_shared<Field_datetime>(
+                is_nullable, null_bit, field_name
+            );
         case MYSQL_TYPE_NULL:
-            return new Field_null(field_length, field_name);
+            return std::make_shared<Field_null>(field_length, field_name);
         case MYSQL_TYPE_BIT:
-            return new Field_bit(
+            return std::make_shared<Field_bit>(
                 field_length, is_nullable, null_bit, bit_offset, field_name
             );
         case MYSQL_TYPE_INVALID:

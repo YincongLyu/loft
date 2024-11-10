@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <sys/types.h>
+#include <memory>
 
 #include <algorithm>
 #include <optional>
@@ -22,6 +23,17 @@
 #include "field_types.h" // enum_field_types
 
 namespace mysql {
+
+class Field;
+using FieldRef = std::shared_ptr<Field>;
+
+typedef int32_t decimal_digit_t;
+using dec1 = decimal_digit_t;
+
+#define HA_VARCHAR_PACKLENGTH(field_length) ((field_length) < 256 ? 1 : 2)
+#define DIG_PER_DEC1                        9
+static const int dig2bytes[DIG_PER_DEC1 + 1] = {0, 1, 1, 2, 2, 3, 3, 4, 4, 4};
+
 
 class Field {
   private:
@@ -79,6 +91,9 @@ class Field {
         在内存上，这个 field 在 table row 里所占用的字节数
     */
     virtual uint32_t pack_length() const { return (uint32_t)field_length; }
+
+    // float/double/str
+    uint32_t get_width() const { return field_length; }
 
     /*
       在磁盘上，这个 field 在 table row 里所占用的字节数
@@ -201,7 +216,7 @@ class Field_new_decimal : public Field_num {
     // 获取类型
     enum_field_types type() const final { return MYSQL_TYPE_NEWDECIMAL; }
 
-    uint32_t pack_length() const final { return (uint32_t)bin_size; }
+//    uint32_t pack_length() const final { return (uint32_t)bin_size; }
 };
 
 class Field_tiny : public Field_num {
@@ -423,6 +438,7 @@ class Field_double final : public Field_real {
           ) {}
 
     enum_field_types type() const final { return MYSQL_TYPE_DOUBLE; }
+
 
     uint32_t pack_length() const final { return sizeof(double); }
 };
@@ -684,7 +700,7 @@ class Field_blob : public Field_longstr {
     /**
       The number of bytes used to represent the length of the blob.
     */
-    uint packlength;
+    uint32_t packlength;
 
   public:
     Field_blob(
@@ -708,7 +724,7 @@ class Field_blob : public Field_longstr {
     enum_field_types type() const override { return MYSQL_TYPE_BLOB; }
 
     uint32_t pack_length() const final {
-        return (uint32_t)(packlength + portable_sizeof_char_ptr);
+        return packlength; // 已经计算过，只有 1 2 3 4
     }
 
     /**
@@ -754,22 +770,21 @@ class Field_enum : public Field_str {
     uint packlength;
 
   public:
-    TYPELIB *typelib;
+//    TYPELIB *typelib;
 
     Field_enum(
         uint32_t len_arg,
         bool is_nullable_arg,
         unsigned char null_bit_arg,
         const char *field_name_arg,
-        uint packlength_arg,
-        TYPELIB *typelib_arg
+        uint packlength_arg
     )
         : Field_str(len_arg, is_nullable_arg, null_bit_arg, field_name_arg)
         , packlength(packlength_arg) {
         set_flag(ENUM_FLAG);
     }
 
-    enum_field_types type() const final { return MYSQL_TYPE_STRING; }
+    enum_field_types type() const final { return real_type(); }
 
     uint32_t pack_length() const final { return (uint32_t)packlength; }
 
@@ -787,16 +802,14 @@ class Field_set final : public Field_enum {
         bool is_nullable_arg,
         unsigned char null_bit_arg,
         const char *field_name_arg,
-        uint32_t packlength_arg,
-        TYPELIB *typelib_arg
+        uint32_t packlength_arg
     )
         : Field_enum(
               len_arg,
               is_nullable_arg,
               null_bit_arg,
               field_name_arg,
-              packlength_arg,
-              typelib_arg
+              packlength_arg
           )
         , empty_set_string("", 0) {
         clear_flag(ENUM_FLAG);
@@ -846,16 +859,16 @@ class Field_null final : public Field_str {
 };
 
 /// 构建 Field 的元数据的 除了 charset 的 5 个字段
-Field *make_field(
+auto make_field(
     const char *field_name,
     size_t field_length,
     bool is_unsigned,
     bool is_nullable,
     size_t null_bit,
     enum_field_types field_type,
-    TYPELIB *interval,
+    int interval_count,
     uint decimals
-);
+) -> FieldRef;
 
 enum_field_types get_blob_type_from_length(size_t length);
 size_t calc_pack_length(enum_field_types type, size_t length);

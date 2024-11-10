@@ -20,22 +20,30 @@ bool Binlog_ofile::write(const loft::uchar *buffer, loft::my_off_t length) {
     return true;
 }
 
-bool Binlog_ofile::seek(loft::my_off_t position) {
+RC Binlog_ofile::seek(loft::my_off_t position) {
     assert(m_pipeline_head_ != nullptr);
     m_pipeline_head_->seekp(position);
     if (!m_pipeline_head_->good()) {
-        return false;
+        return RC::IOERR_SEEK;
     }
     m_position_ = position;
-    return true;
+    return RC::SUCCESS;
 }
 
-bool Binlog_ofile::sync() {
+RC Binlog_ofile::sync() {
     assert(m_pipeline_head_ != nullptr);
     m_pipeline_head_->flush();
-    return m_pipeline_head_->good();
+    return m_pipeline_head_->good() ? RC::SUCCESS : RC::IOERR_SYNC;
 }
 
-bool Binlog_ofile::flush() {
+RC Binlog_ofile::flush() {
     return sync();
+}
+
+Binlog_ofile::Binlog_ofile(const char *binlog_name, RC &rc) : m_position_(0) {
+    if (open(binlog_name)) {
+        rc = RC::FILE_OPEN;
+    } else {
+        rc = RC::IOERR_OPEN;
+    }
 }

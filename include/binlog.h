@@ -9,6 +9,8 @@
 #include "basic_ostream.h"
 #include "constants.h"
 #include "control_events.h"
+#include "logging.h"
+#include "rc.h"
 #include <atomic>
 
 /**
@@ -26,8 +28,8 @@ class TC_LOG {
 
     enum enum_result { RESULT_SUCCESS, RESULT_ABORTED, RESULT_INCONSISTENT };
 
-    virtual bool open(const char *file_name, uint64_t file_size) = 0;
-    virtual void close() = 0;
+    virtual RC open() = 0;
+    virtual RC close() = 0;
 
     // TODO 可能后续会加上 THD 参数
     // TODO 暂时不考虑 prepare, commit, rollback 函数
@@ -36,46 +38,19 @@ class TC_LOG {
 // 暂时不考虑 index 文件、lock
 class MYSQL_BIN_LOG : TC_LOG {
   public:
-    explicit MYSQL_BIN_LOG(Basic_ostream *ostream)
-        : m_binlog_file_(dynamic_cast<Binlog_ofile *>(ostream)) {}
-
+    //    explicit MYSQL_BIN_LOG(std::unique_ptr<Basic_ostream> ostream)
+    //        :
+    //        m_binlog_file_(std::unique_ptr<Binlog_ofile>(dynamic_cast<Binlog_ofile*>(ostreamelease())))
+    //        {}
+    MYSQL_BIN_LOG(const char *file_name, uint64_t file_size, RC &rc);
     ~MYSQL_BIN_LOG() override = default;
-
-  private:
-    enum enum_log_state_ { LOG_OPENED, LOG_CLOSED, LOG_TO_BE_OPENED };
-
-    // 描述文件打开状态
-    std::atomic<enum_log_state_> atomic_log_state{LOG_CLOSED};
-    // binlog 文件名
-    char log_file_name_[FN_REFLEN];
-    // 当前 binlog file 写到一定大小时，触发写入 rotate event
-    uint64_t max_size_arg;
-    loft::my_off_t bytes_written_{0};
-
-    char db_[NAME_LEN + 1];
-    // 写 binlog 的输出流
-    Binlog_ofile *m_binlog_file_;
 
   public:
     //********************* common file operation *************************
-    bool open(const char *file_name, uint64_t file_size) override; // 构造函数
-    void close() override;                                         // 析构函数
-    void flush() {
-        m_binlog_file_->flush();
-    }
+    RC open() override;  // 构造函数
+    RC close() override; // 析构函数
 
-    // 告诉编译器，这个变量很重要
-    [[nodiscard]]
-    bool is_open() const {
-        return atomic_log_state != LOG_CLOSED;
-    }
-
-    /*
-     * 在 master 上生成 binlog，Format_description_log_event 是
-     * null，所以这里直接去掉 fde 参数 若是 slave 上根据 master 的binlog 生成的
-     * relay log，则不为 null
-     */
-    int create_file(const char *file_name, uint64_t file_size);
+    void flush() { m_binlog_file_->flush(); }
 
     //********************* file write operation *************************
     bool write_event_to_binlog(AbstractEvent *ev);
@@ -85,6 +60,19 @@ class MYSQL_BIN_LOG : TC_LOG {
     void reset_bytes_written() { bytes_written_ = 0; }
 
     void update_binlog_end_pos(const char *file, loft::my_off_t pos);
+
+  private:
+    enum enum_log_state_ { LOG_OPENED, LOG_CLOSED, LOG_TO_BE_OPENED };
+
+    std::atomic<enum_log_state_> atomic_log_state_; // 描述文件打开状态
+
+    char file_name_[FN_REFLEN]; // binlog 文件名
+    // 当前 binlog file 写到一定大小时，触发写入 rotate event
+    uint64_t max_size_; // binlog 文件最大大小
+
+    loft::my_off_t bytes_written_; // binlog 文件当前写入大小
+
+    std::unique_ptr<Binlog_ofile> m_binlog_file_;
 };
 
 #endif // LOFT_BINLOG_H

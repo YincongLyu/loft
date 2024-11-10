@@ -7,6 +7,7 @@
 #define LOFT_BASIC_OSTREAM_H
 
 #include "constants.h"
+#include "rc.h"
 #include <cassert>
 #include <fstream>
 #include <memory>
@@ -19,9 +20,9 @@ class Basic_ostream {
   public:
     // Write data to buffer, return true on success, false on failure
     virtual bool write(const loft::uchar *buffer, loft::my_off_t length) = 0;
-    virtual bool seek(loft::my_off_t position) = 0;
-    virtual bool sync() = 0;
-    virtual bool flush() = 0;
+    virtual RC seek(loft::my_off_t position) = 0;
+    virtual RC sync() = 0;
+    virtual RC flush() = 0;
     virtual loft::my_off_t get_position() = 0;
 
     virtual ~Basic_ostream() = default;
@@ -29,17 +30,23 @@ class Basic_ostream {
 
 class Binlog_ofile : public Basic_ostream {
   public:
+    Binlog_ofile(const char *binlog_name, RC &rc);
+
     ~Binlog_ofile() override { close(); }
 
-    void close() {
-        if (m_pipeline_head_) {
-            m_pipeline_head_->close();
-            m_pipeline_head_.reset();
-            m_position_ = 0;
-        }
-    }
+    bool write(const loft::uchar *buffer, loft::my_off_t length) override;
+    RC seek(loft::my_off_t position) override;
+    RC sync() override;
+    RC flush() override;
 
-    // Use std::fstream directly, ensuring successful opening
+    // Helper functions
+    loft::my_off_t get_position() override { return m_position_; };
+
+    bool is_empty() const { return m_position_ == 0; }
+
+    bool is_open() const { return m_pipeline_head_ != nullptr; }
+
+  private:
     bool open(const char *binlog_name) {
         std::unique_ptr<std::fstream> file_ostream =
             std::make_unique<std::fstream>(
@@ -53,23 +60,16 @@ class Binlog_ofile : public Basic_ostream {
         return true;
     }
 
-    bool write(const loft::uchar *buffer, loft::my_off_t length) override;
-    bool seek(loft::my_off_t position) override;
-    bool sync() override;
-    bool flush() override;
-
-    loft::my_off_t get_position() override { return m_position_; };
-
-    // Helper functions
-
-    std::fstream &get_pipeline_head() { return *m_pipeline_head_; }
-
-    bool is_empty() const { return m_position_ == 0; }
-
-    bool is_open() const { return m_pipeline_head_ != nullptr; }
+    void close() {
+        if (m_pipeline_head_) {
+            m_pipeline_head_->close();
+            m_pipeline_head_.reset();
+            m_position_ = 0;
+        }
+    }
 
   private:
-    loft::my_off_t m_position_ = 0;
+    loft::my_off_t m_position_;
     std::unique_ptr<std::fstream> m_pipeline_head_;
 };
 

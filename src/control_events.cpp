@@ -78,7 +78,7 @@ Format_description_event::Format_description_event(
 
     // AbstarctEvent 在写 common_header 时，会使用成员变量
     // type_code_，故先不填充没事
-    this->common_header_ = new EventCommonHeader();
+    this->common_header_ = std::make_unique<EventCommonHeader>();
     //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
@@ -129,7 +129,7 @@ Previous_gtids_event::Previous_gtids_event(const Gtid_set *set)
     set->encode(buffer);
     buf_ = buffer;
 
-    this->common_header_ = new EventCommonHeader();
+    this->common_header_ = std::make_unique<EventCommonHeader>();
     //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
@@ -175,7 +175,7 @@ Gtid_event::Gtid_event(
     spec_.gtid_.clear();
     sid_.clear();
 
-    this->common_header_ = new EventCommonHeader();
+    this->common_header_ = std::make_unique<EventCommonHeader>();
     Log_event_type event_type =
         (spec_.type_ == ANONYMOUS_GTID
              ? Log_event_type::ANONYMOUS_GTID_LOG_EVENT
@@ -297,7 +297,8 @@ Gtid_event::~Gtid_event() = default;
 Xid_event::Xid_event(uint64_t xid_arg)
     : AbstractEvent(XID_EVENT)
     , xid_(xid_arg) {
-    this->common_header_ = new EventCommonHeader();
+    //    this->common_header_ = new EventCommonHeader();
+    this->common_header_ = std::make_unique<EventCommonHeader>();
     //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
@@ -324,7 +325,7 @@ Rotate_event::Rotate_event(
     , flags_(flags_arg) /* DUP_NAME */
     , pos_(pos_arg) {   /* 4 byte */
 
-    this->common_header_ = new EventCommonHeader();
+    this->common_header_ = std::make_unique<EventCommonHeader>();
     //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 

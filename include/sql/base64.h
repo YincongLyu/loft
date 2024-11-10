@@ -16,25 +16,23 @@
 #include <string.h>
 #include <sys/types.h>
 
-
 /* Allow multuple chunks 'AAA= AA== AA==', binlog uses this */
 #define MY_BASE64_DECODE_ALLOW_MULTIPLE_CHUNKS 1
 
-                                                                  static char base64_table[] =
-                                                       "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                                                       "abcdefghijklmnopqrstuvwxyz"
-                                                       "0123456789+/";
+static char base64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                             "abcdefghijklmnopqrstuvwxyz"
+                             "0123456789+/";
 
 /*
   Base64 decoder stream
 */
 typedef struct my_base64_decoder_t {
-    const char *src; /* Pointer to the current input position        */
-    const char *end; /* Pointer to the end of input buffer           */
-    uint c;          /* Collect bits into this number                */
-    int error;       /* Error code                                   */
-    unsigned char state;     /* Character number in the current group of 4   */
-    unsigned char mark;      /* Number of padding marks in the current group */
+    const char *src;     /* Pointer to the current input position        */
+    const char *end;     /* Pointer to the end of input buffer           */
+    uint c;              /* Collect bits into this number                */
+    int error;           /* Error code                                   */
+    unsigned char state; /* Character number in the current group of 4   */
+    unsigned char mark;  /* Number of padding marks in the current group */
 } MY_BASE64_DECODER;
 
 /*
@@ -75,7 +73,8 @@ static int8_t from_base64_table[] = {
     /*E0*/ -1, -1, -1, -1, -1, -1, -1, -1,
     -1,        -1, -1, -1, -1, -1, -1, -1,
     /*F0*/ -1, -1, -1, -1, -1, -1, -1, -1,
-    -1,        -1, -1, -1, -1, -1, -1, -1};
+    -1,        -1, -1, -1, -1, -1, -1, -1
+};
 
 /**
  * Skip leading spaces in a base64 encoded stream
@@ -93,11 +92,14 @@ static int8_t from_base64_table[] = {
  */
 static inline bool my_base64_decoder_skip_spaces(MY_BASE64_DECODER *decoder) {
     for (; decoder->src < decoder->end; decoder->src++) {
-        if (from_base64_table[(unsigned char)*decoder->src] != -2) return false;
-  }
-    if (decoder->state > 0)
-    decoder->error = 1; /* Unexpected end-of-input found */
-  return true;
+        if (from_base64_table[(unsigned char)*decoder->src] != -2) {
+            return false;
+        }
+    }
+    if (decoder->state > 0) {
+        decoder->error = 1; /* Unexpected end-of-input found */
+    }
+    return true;
 }
 
 /**
@@ -114,9 +116,10 @@ static inline bool my_base64_decoder_skip_spaces(MY_BASE64_DECODER *decoder) {
 static inline bool my_base64_add(MY_BASE64_DECODER *decoder) {
     int res;
     decoder->c <<= 6;
-    if ((res = from_base64_table[(unsigned char)*decoder->src++]) < 0)
-    return (decoder->error = true);
-  decoder->c += (uint)res;
+    if ((res = from_base64_table[(unsigned char)*decoder->src++]) < 0) {
+        return (decoder->error = true);
+    }
+    decoder->c += (uint)res;
     return false;
 }
 
@@ -131,9 +134,11 @@ static inline bool my_base64_add(MY_BASE64_DECODER *decoder) {
  *  true  on error (unexpected character or unexpected end-of-input found)
  */
 static inline bool my_base64_decoder_getch(MY_BASE64_DECODER *decoder) {
-    if (my_base64_decoder_skip_spaces(decoder)) return true; /* End-of-input */
+    if (my_base64_decoder_skip_spaces(decoder)) {
+        return true; /* End-of-input */
+    }
 
-  if (!my_base64_add(decoder)) /* Valid base64 character found */
+    if (!my_base64_add(decoder)) /* Valid base64 character found */
     {
         if (decoder->mark) {
             /* If we have scanned '=' already, then only '=' is valid */
@@ -178,8 +183,10 @@ static inline bool my_base64_decoder_getch(MY_BASE64_DECODER *decoder) {
 */
 static inline u_int64_t base64_needed_encoded_length(u_int64_t length_of_data) {
     u_int64_t nb_base64_chars;
-    if (length_of_data == 0) return 1;
-  nb_base64_chars = (length_of_data + 2) / 3 * 4;
+    if (length_of_data == 0) {
+        return 1;
+    }
+    nb_base64_chars = (length_of_data + 2) / 3 * 4;
 
     return nb_base64_chars +            /* base64 char incl padding */
            (nb_base64_chars - 1) / 76 + /* newlines */
@@ -208,10 +215,11 @@ static inline u_int64_t base64_encode_max_arg_length() {
 /*
   Calculate how much memory needed for dst of base64_decode()
 */
-static inline u_int64_t base64_needed_decoded_length(
-    u_int64_t length_of_encoded_data) {
+static inline u_int64_t
+base64_needed_decoded_length(u_int64_t length_of_encoded_data) {
     return static_cast<u_int64_t>(
-        ceil(static_cast<double>(length_of_encoded_data * 3 / 4)));
+        ceil(static_cast<double>(length_of_encoded_data * 3 / 4))
+    );
 }
 
 /*
@@ -244,26 +252,32 @@ static inline int base64_encode(const void *src, size_t src_len, char *dst) {
         c = s[i++];
         c <<= 8;
 
-        if (i < src_len) c += s[i];
-    c <<= 8;
+        if (i < src_len) {
+            c += s[i];
+        }
+        c <<= 8;
         i++;
 
-        if (i < src_len) c += s[i];
-    i++;
+        if (i < src_len) {
+            c += s[i];
+        }
+        i++;
 
         *dst++ = base64_table[(c >> 18) & 0x3f];
         *dst++ = base64_table[(c >> 12) & 0x3f];
 
-        if (i > (src_len + 1))
-      *dst++ = '=';
-    else
-      *dst++ = base64_table[(c >> 6) & 0x3f];
+        if (i > (src_len + 1)) {
+            *dst++ = '=';
+        } else {
+            *dst++ = base64_table[(c >> 6) & 0x3f];
+        }
 
-    if (i > src_len)
-      *dst++ = '=';
-    else
-      *dst++ = base64_table[(c >> 0) & 0x3f];
-  }
+        if (i > src_len) {
+            *dst++ = '=';
+        } else {
+            *dst++ = base64_table[(c >> 0) & 0x3f];
+        }
+    }
     *dst = '\0';
 
     return 0;
@@ -289,8 +303,9 @@ static inline int base64_encode(const void *src, size_t src_len, char *dst) {
  * @param flags   flags e.g. allow multiple chunks
  * @return Number of bytes written at 'dst', or -1 in case of failure
  */
-static inline int64_t base64_decode(const char *src_base, size_t len, void *dst,
-                                  const char **end_ptr, int flags) {
+static inline int64_t base64_decode(
+    const char *src_base, size_t len, void *dst, const char **end_ptr, int flags
+) {
     char *d = (char *)dst;
     MY_BASE64_DECODER decoder;
 
@@ -303,29 +318,37 @@ static inline int64_t base64_decode(const char *src_base, size_t len, void *dst,
         decoder.c = 0;
         decoder.state = 0;
 
-        if (my_base64_decoder_getch(&decoder) ||
-            my_base64_decoder_getch(&decoder) ||
-            my_base64_decoder_getch(&decoder) || my_base64_decoder_getch(&decoder))
-      break;
+        if (my_base64_decoder_getch(&decoder)
+            || my_base64_decoder_getch(&decoder)
+            || my_base64_decoder_getch(&decoder)
+            || my_base64_decoder_getch(&decoder)) {
+            break;
+        }
 
-    *d++ = (decoder.c >> 16) & 0xff;
+        *d++ = (decoder.c >> 16) & 0xff;
         *d++ = (decoder.c >> 8) & 0xff;
         *d++ = (decoder.c >> 0) & 0xff;
 
         if (decoder.mark) {
             d -= decoder.mark;
-            if (!(flags & MY_BASE64_DECODE_ALLOW_MULTIPLE_CHUNKS)) break;
-      decoder.mark = 0;
+            if (!(flags & MY_BASE64_DECODE_ALLOW_MULTIPLE_CHUNKS)) {
+                break;
+            }
+            decoder.mark = 0;
         }
     }
 
     /* Return error if there are more non-space characters */
     decoder.state = 0;
-    if (!my_base64_decoder_skip_spaces(&decoder)) decoder.error = 1;
+    if (!my_base64_decoder_skip_spaces(&decoder)) {
+        decoder.error = 1;
+    }
 
-  if (end_ptr != nullptr) *end_ptr = decoder.src;
+    if (end_ptr != nullptr) {
+        *end_ptr = decoder.src;
+    }
 
-  return decoder.error ? -1 : (int)(d - (char *)dst);
+    return decoder.error ? -1 : (int)(d - (char *)dst);
 }
 
 #endif /* !__BASE64_H_INCLUDED__ */

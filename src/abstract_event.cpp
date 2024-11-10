@@ -23,7 +23,7 @@ uint32_t AbstractEvent::write_common_header_to_memory(uchar *buf) {
     //    int4store(buf, timestamp);
     int4store(buf, 1722493961);
     buf[EVENT_TYPE_OFFSET] = type_code_;
-    int4store(buf + SERVER_ID_OFFSET, server_id_);
+    int4store(buf + SERVER_ID_OFFSET, SERVER_ID);
     int4store(
         buf + EVENT_LEN_OFFSET,
         static_cast<uint32_t>(common_header_->data_written_)

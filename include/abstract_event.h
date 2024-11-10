@@ -6,6 +6,9 @@
 #define LOFT_ABSTRACT_EVENT_H
 
 #include "basic_ostream.h"
+#include "init_setting.h"
+#include "macros.h"
+
 #include <constants.h>
 #include <cstddef>
 #include <cstdint>
@@ -193,9 +196,9 @@ class AbstractEvent {
 
     virtual ~AbstractEvent() = 0;
 
-    AbstractEvent(const AbstractEvent &) = default;
+    DISALLOW_COPY(AbstractEvent);
+
     AbstractEvent(AbstractEvent &&) = default;
-    AbstractEvent &operator=(const AbstractEvent &) = default;
     AbstractEvent &operator=(AbstractEvent &&) = default;
 
     uint32_t write_common_header_to_memory(uchar *buf);
@@ -213,10 +216,8 @@ class AbstractEvent {
     //    virtual bool write(Basic_ostream *ostream) = 0;
 
     virtual bool write(Basic_ostream *ostream) {
-        return
-            write_common_header(ostream, get_data_size())
-            && write_data_header(ostream) && write_data_body(ostream);
-
+        return write_common_header(ostream, get_data_size())
+               && write_data_header(ostream) && write_data_body(ostream);
     }
 
     /*
@@ -235,26 +236,17 @@ class AbstractEvent {
 
     virtual bool write_data_body(Basic_ostream *) { return true; }
 
-    LEX_CSTRING get_invoker_user() {
-        return {"", 0};
-    }
-    LEX_CSTRING get_invoker_host() {
-        std::string host = "127.0.0.1";
-        return {host.c_str(), host.length()};
-    }
+    LEX_CSTRING get_invoker_user() { return {USER, strlen(USER)}; }
+
+    LEX_CSTRING get_invoker_host() { return {HOST, strlen(HOST)}; }
 
   public:
-    EventCommonHeader *common_header_;
+    std::unique_ptr<EventCommonHeader> common_header_;
     EventCommonFooter *common_footer_;
 
     enum Log_event_type type_code_ = UNKNOWN_EVENT;
-    uint32_t server_id_ = 1000; // 配置项读入
-    /* The number of seconds the query took to run on the master. */
-    ulong exec_time_ = 2;
-    uint32_t slave_proxy_id_ = 10000;
     bool query_start_usec_used_ = true;
-//    uint16_t p_default_collation_for_utf8mb4_number_ = 255;
-    bool need_binlog_invoker_ = true;
+
 };
 
 #endif // LOFT_ABSTRACT_EVENT_H

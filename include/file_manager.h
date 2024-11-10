@@ -2,6 +2,7 @@
 #ifndef FILE_MANAGER_H
 #define FILE_MANAGER_H
 
+// #include "log_file.h"
 #include "binlog.h"
 #include "constants.h"
 #include "ddl_generated.h"
@@ -51,6 +52,8 @@ class MyReader {
         return ptr_ >= buffer_ ? ptr_ - buffer_ : limit_;
     }
 
+    bool valid() { return ptr_ < buffer_ + limit_; }
+
     template<typename T>
     T letoh(T value) {
         if constexpr (std::is_same_v<T, uint16_t>) {
@@ -89,8 +92,7 @@ class LogFormatTransformManager {
     auto readFileAsBinary(const std::string &filePath = "./data")
         -> std::pair<std::unique_ptr<char[]>, unsigned long long>;
 
-    // 完整转化一个 data 文件中的所有的 sql
-    void transform(const char *data, unsigned long long file_sz);
+    enum_field_types ConvertStringType(const char *type_str);
 
     // 组装 3 个 event
     void transformDDL(const DDL *ddl, MYSQL_BIN_LOG *binLog);
@@ -99,10 +101,8 @@ class LogFormatTransformManager {
     void transformDML(const DML *dml, MYSQL_BIN_LOG *binLog);
 
   private:
-    std::string filepath_;                     // 文件路径，默认是 ./data
-    const int intOffset_ = loft::INT_OFFSET;   // 头部，前 4 个字节存长度
-    uint32_t original_server_version_ = 80026; // 配置项读入
-    uint32_t immediate_server_version_ = 80026;
+    std::string filepath_;                   // 文件路径，默认是 ./data
+    const int intOffset_ = loft::INT_OFFSET; // 头部，前 4 个字节存长度
 
     // <table_name, table_id> 对应，在执行多条 DML 时，能确定正在 操作同一张表
     std::unordered_map<std::string, Table_id> tableName2TableId_;

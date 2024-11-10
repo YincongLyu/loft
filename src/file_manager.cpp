@@ -1,6 +1,7 @@
 #include "file_manager.h"
 #include "binlog.h"
 
+#include "sql/base64.h"
 #include "control_events.h"
 #include "ddl_generated.h"
 #include "dml_generated.h"
@@ -8,7 +9,6 @@
 #include "rows_event.h"
 #include "statement_events.h"
 #include "write_event.h"
-#include "base64.h"
 
 #include "logging.h"
 #include "macros.h"
@@ -83,7 +83,8 @@ std::string formatDoubleToFixedWidth(double number, int length, int frac) {
     auto decimalPos = str.find('.');
 
     // 整数部分的宽度
-    int intPartWidth = (decimalPos == std::string::npos) ? str.length() : decimalPos;
+    int intPartWidth =
+        (decimalPos == std::string::npos) ? str.length() : decimalPos;
 
     // 判断整数部分是否超出要求的宽度
     if (intPartWidth > length - frac - 1) {
@@ -97,7 +98,6 @@ std::string formatDoubleToFixedWidth(double number, int length, int frac) {
 
     return str;
 }
-
 
 auto LogFormatTransformManager::readSQLN(int nowTestCase
 ) -> std::unique_ptr<char[]> {
@@ -158,12 +158,6 @@ auto LogFormatTransformManager::readFileAsBinary(const std::string &filePath
     return {std::move(buffer), size};
 }
 
-void LogFormatTransformManager::transform(
-    const char *data, unsigned long long file_sz
-) {
-    return;
-}
-
 void LogFormatTransformManager::transformDDL(
     const DDL *ddl, MYSQL_BIN_LOG *binLog
 ) {
@@ -187,9 +181,9 @@ void LogFormatTransformManager::transformDDL(
     unsigned long long int i_ts = stringToTimestamp(immediateCommitTs->c_str());
     unsigned long long int o_ts = stringToTimestamp(originalCommitTs->c_str());
 
-    std::cout << originalCommitTs->c_str() << " " << o_ts << std::endl;
+    //    std::cout << originalCommitTs->c_str() << " " << o_ts << std::endl;
 
-    Gtid_event *ge = new Gtid_event(
+    auto ge = std::make_unique<Gtid_event>(
         lastCommit, txSeq, true, o_ts, i_ts, ORIGINAL_SERVER_VERSION,
         IMMEDIATE_SERVER_VERSION
     );
@@ -215,7 +209,7 @@ void LogFormatTransformManager::transformDDL(
     unsigned long long table_map_for_update_arg = 0; // 随意
     int errcode = ERROR_CODE;
 
-    Query_event *qe = new Query_event(
+    auto qe = std::make_unique<Query_event>(
         query_arg, catalog_arg, db_arg, txSeq, query_length, thread_id_arg,
         sql_mode_arg, auto_increment_increment_arg, auto_increment_offset_arg,
         number, table_map_for_update_arg, errcode
@@ -223,7 +217,7 @@ void LogFormatTransformManager::transformDDL(
 
     // ******* print debug info **************************
     if (ddlType == nullptr) { // drop db
-        LOG_INFO("sql_type: drop db");
+        LOG_INFO("sql_type: drop db | create/drop procedure/function");
     } else {
         std::string sql_type = ddlType->c_str();
         if (sql_type == "CREATE TABLE") {
@@ -238,8 +232,8 @@ void LogFormatTransformManager::transformDDL(
     }
     // ******************************************************************
 
-    binLog->write_event_to_binlog(ge);
-    binLog->write_event_to_binlog(qe);
+    binLog->write_event_to_binlog(ge.get());
+    binLog->write_event_to_binlog(qe.get());
 }
 
 enum_field_types
@@ -264,7 +258,7 @@ void LogFormatTransformManager::transformDML(
     unsigned long long int i_ts = stringToTimestamp(immediateCommitTs->c_str());
     unsigned long long int o_ts = stringToTimestamp(originalCommitTs->c_str());
 
-    Gtid_event *ge = new Gtid_event(
+    auto ge = std::make_unique<Gtid_event>(
         lastCommit, txSeq, true, o_ts, i_ts, ORIGINAL_SERVER_VERSION,
         IMMEDIATE_SERVER_VERSION
     );
@@ -274,7 +268,7 @@ void LogFormatTransformManager::transformDML(
     //////////****************** query event start ****************************
     const char *query_arg = DML_QUERY_STR; // row-based 的 DML 固定内容是 BEGIN
     auto dbName = dml->db_name();
-    const char *db_arg = strdup(dbName->c_str()); // null-terminaled类型的字符串
+    const char *db_arg = dbName->c_str();
     const char *catalog_arg =
         db_arg; // 在binlog v4中，目录名称通常被设置为与事件相关的数据库的名称
 
@@ -289,7 +283,7 @@ void LogFormatTransformManager::transformDML(
     unsigned long long table_map_for_update_arg = 0; // 随意
     int errcode = 0;
 
-    Query_event *qe = new Query_event(
+    auto qe = std::make_unique<Query_event>(
         query_arg, catalog_arg, db_arg, INVALID_XID, query_length,
         thread_id_arg, sql_mode_arg, auto_increment_increment_arg,
         auto_increment_offset_arg, number, table_map_for_update_arg, errcode
@@ -303,9 +297,10 @@ void LogFormatTransformManager::transformDML(
     auto fields = dml->fields();
 
     std::unordered_map<std::string, int> field_map; // [field_name, field_idx]
-    std::vector<mysql::Field *> field_vec;
+    std::vector<mysql::FieldRef> field_vec;
     size_t null_bit = 0;
-    TYPELIB *interval = new TYPELIB;
+    //    TYPELIB *interval = new TYPELIB;
+    int interval_count = 0;
     int fieldIdx = 0; // 下标
     for (auto field : *fields) {
         auto field_name = field->name();
@@ -319,25 +314,26 @@ void LogFormatTransformManager::transformDML(
 
         enum_field_types field_type = ConvertStringType(data_type->c_str());
         if (field_type == MYSQL_TYPE_ENUM || field_type == MYSQL_TYPE_SET) {
-            interval->count = field_length;
-//            field_type = MYSQL_TYPE_STRING; // 表头存的还是 string 类型
+            interval_count = field_length;
         }
         if (is_nullable) {
             null_bit = fieldIdx;
         }
-
-        mysql::Field *field_obj = mysql::make_field(
+        // 工厂函数
+        auto field_obj = mysql::make_field(
             field_name->c_str(), field_length, is_unsigned, is_nullable,
-            null_bit, field_type, interval, decimals
+            null_bit, field_type, interval_count, decimals
         );
 
         field_vec.emplace_back(field_obj);
         field_map.insert({field_name->c_str(), ++fieldIdx});
     }
     // TODO 需要根据 create table 时，记录 table_id, 这是全局的
-    Table_id tid(DML_TABLE_ID); // 暂时随便写一个，实际上要做一个 连续的 id 分配器
+    Table_id tid(DML_TABLE_ID
+    ); // 暂时随便写一个，实际上要做一个 连续的 id 分配器
     unsigned long colcnt = field_vec.size();
-    Table_map_event *table_map_event = new Table_map_event(
+    // field_vec 内部的元素是共享的
+    auto table_map_event = std::make_unique<Table_map_event>(
         tid, colcnt, db_arg, strlen(db_arg), tbl_arg, strlen(tbl_arg), field_vec
     );
 
@@ -361,7 +357,7 @@ void LogFormatTransformManager::transformDML(
         LOG_ERROR("unknown opType: %s", opType->c_str());
     }
 
-    Rows_event *row = new Rows_event(
+    auto row = std::make_unique<Rows_event>(
         tid, colcnt, 1, rows_type
     ); // 初始化 一个 rows_event 对象
 
@@ -382,11 +378,11 @@ void LogFormatTransformManager::transformDML(
 
             if (valueType != DataMeta_NONE) {
                 before_rows_pair.emplace(field_map_id, false);
-                conditionDataMap[field_map_id] = conditionData; // conditionDataMap
+                conditionDataMap[field_map_id] =
+                    conditionData; // conditionDataMap
             } else {
                 before_rows_pair.emplace(field_map_id, true);
             }
-
         }
 
         std::vector<int> before_rows;
@@ -399,7 +395,7 @@ void LogFormatTransformManager::transformDML(
         row->set_null_before(before_rows_null);
 
         for (auto &[idx, kv] : conditionDataMap) {
-            auto field = field_vec[idx - 1];
+            auto field = field_vec[idx - 1].get();
             switch (kv->value_type()) {
                 case DataMeta_NONE:
                     break;
@@ -408,46 +404,50 @@ void LogFormatTransformManager::transformDML(
                     long integer_value = kv->value_as_LongVal()->value();
                     if (field->type() == MYSQL_TYPE_BIT) {
                         row->write_data_before(
-                            &integer_value, field->type(), field->pack_length(), 0,
-                            0, 0
+                            &integer_value, field->type(), field->pack_length(),
+                            0, 0, 0
                         );
                     } else if (field->type() == MYSQL_TYPE_YEAR) {
                         // year, 存的时候需要主动减去 1900
                         integer_value = integer_value - 1900;
                         row->write_data_before(
-                            &integer_value, field->type(), 0, 0,
-                            0, 0
+                            &integer_value, field->type(), 0, 0, 0, 0
                         );
                     } else {
-                        // short, mediumint, int, bitint: 2, 3, 4, 8 整数没有 strlen
-                        // enum, set
+                        // short, mediumint, int, bitint: 2, 3, 4, 8 整数没有
+                        // strlen enum, set
                         row->write_data_before(
-                            &integer_value, field->type(), field->pack_length(), 0,
-                            0, 0
+                            &integer_value, field->type(), field->pack_length(),
+                            0, 0, 0
                         );
                     }
 
                     break;
                 }
                 case DataMeta_DoubleVal: {
-                    // float: 4 字节, double 8 字节, 传入的时候需要手动处理精度问题
+                    // float: 4 字节, double 8 字节,
+                    // 传入的时候需要手动处理精度问题
                     double double_value = kv->value_as_DoubleVal()->value();
 
-                    std::string num = formatDoubleToFixedWidth(double_value, field->get_width(), field->decimals());
-                    LOFT_ASSERT(num != "", "double number format must be valid");
+                    std::string num = formatDoubleToFixedWidth(
+                        double_value, field->get_width(), field->decimals()
+                    );
+                    LOFT_ASSERT(
+                        num != "", "double number format must be valid"
+                    );
                     double_value = std::stof(num);
 
                     if (field->type() == MYSQL_TYPE_FLOAT) {
                         float float_value = std::stof(num);
                         row->write_data_before(
-                            &float_value, field->type(), field->pack_length(), 0,
-                            0, 0
+                            &float_value, field->type(), field->pack_length(),
+                            0, 0, 0
                         );
                     } else {
                         double_value = std::stod(num);
                         row->write_data_before(
-                            &double_value, field->type(), field->pack_length(), 0,
-                            0, 0
+                            &double_value, field->type(), field->pack_length(),
+                            0, 0, 0
                         );
                     }
                     break;
@@ -455,31 +455,38 @@ void LogFormatTransformManager::transformDML(
                 case DataMeta_StringVal: {
                     LOG_INFO("field type: %d", field->type());
                     // decimal 传入的也是字符串类型
-                    const char* str = kv->value_as_StringVal()->value()->c_str();
+                    const char *str =
+                        kv->value_as_StringVal()->value()->c_str();
 
                     if (field->type() == MYSQL_TYPE_NEWDECIMAL) {
-                        double double_value = std::stod(str); // 此时 double 可能会加上更多的小数部分，但可以忽略
-                        LOG_INFO("current field type is decimal, double_value: %lf", double_value);
+                        double double_value = std::stod(str
+                        ); // 此时 double 可能会加上更多的小数部分，但可以忽略
+                        LOG_INFO(
+                            "current field type is decimal, double_value: %lf",
+                            double_value
+                        );
                         row->write_data_before(
                             &double_value, field->type(), 0, 0,
                             field->pack_length(), field->decimals()
                         );
 
                     } else {
-
-                        const char* dst = (char *)malloc(base64_needed_decoded_length(strlen(str)));
-                        int64_t dst_len = base64_decode(str, strlen(str), (void *)dst, nullptr, 0);
+                        const char *dst = (char *)malloc(
+                            base64_needed_decoded_length(strlen(str))
+                        );
+                        int64_t dst_len = base64_decode(
+                            str, strlen(str), (void *)dst, nullptr, 0
+                        );
 
                         row->write_data_before(
-                            dst, field->type(), field->pack_length(),
-                            dst_len, 0, 0
+                            dst, field->type(), field->pack_length(), dst_len,
+                            0, 0
                         );
                     }
 
                     break;
                 }
             }
-
         }
     }
 
@@ -515,7 +522,7 @@ void LogFormatTransformManager::transformDML(
 
         // 顺序遍历，写 row, 这次只看 value
         for (auto &[idx, kv] : newDataMap) {
-            auto field = field_vec[idx - 1];
+            auto field = field_vec[idx - 1].get();
             switch (kv->value_type()) {
                 case DataMeta_NONE:
                     break;
@@ -534,7 +541,8 @@ void LogFormatTransformManager::transformDML(
                             &integer_value, field->type(), 0, 0, 0, 0
                         );
                     } else {
-                        // short, mediumint, int, bitint: 2, 3, 4, 8 整数没有 strlen enum, set
+                        // short, mediumint, int, bitint: 2, 3, 4, 8 整数没有
+                        // strlen enum, set
                         row->write_data_after(
                             &integer_value, field->type(), field->pack_length(),
                             0, 0, 0
@@ -544,7 +552,8 @@ void LogFormatTransformManager::transformDML(
                     break;
                 }
                 case DataMeta_DoubleVal: {
-                    // float: 4 字节, double 8 字节, 传入的时候需要手动处理精度问题
+                    // float: 4 字节, double 8 字节,
+                    // 传入的时候需要手动处理精度问题
                     double double_value = kv->value_as_DoubleVal()->value();
 
                     std::string num = formatDoubleToFixedWidth(
@@ -613,19 +622,16 @@ void LogFormatTransformManager::transformDML(
 
     //////////****************** xid event start ******************************
 
-    Xid_event *xe = new Xid_event(txSeq);
+    auto xe = std::make_unique<Xid_event>(txSeq);
     LOG_INFO("construct xid event end...");
 
     //////////****************** xid event end ******************************
 
-    binLog->write_event_to_binlog(ge);
-    binLog->write_event_to_binlog(qe);
-    binLog->write_event_to_binlog(table_map_event);
-    // TODO
-    binLog->write_event_to_binlog(row);
-    binLog->write_event_to_binlog(xe);
+    binLog->write_event_to_binlog(ge.get());
+    binLog->write_event_to_binlog(qe.get());
+    binLog->write_event_to_binlog(table_map_event.get());
+    binLog->write_event_to_binlog(row.get());
+    binLog->write_event_to_binlog(xe.get());
 }
-
-
 
 } // namespace loft

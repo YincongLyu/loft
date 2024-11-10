@@ -8,8 +8,8 @@
 #include "abstract_event.h"
 #include "sql/mysql_fields.h"
 #include "table_id.h"
-#include <memory>
 
+#include <memory>
 #include <vector>
 
 class Table_map_event : public AbstractEvent {
@@ -21,10 +21,19 @@ class Table_map_event : public AbstractEvent {
         size_t dblen,
         const char *tblnam,
         size_t tbllen,
-        std::vector<mysql::Field*>& column_view
+        const std::vector<mysql::FieldRef> &column_view
     );
 
     ~Table_map_event() override;
+    DISALLOW_COPY(Table_map_event);
+
+    // ********* impl virtual function *********************
+    size_t get_data_size() override { return m_data_size_; }
+
+    bool write_data_header(Basic_ostream *ostream) override;
+    bool write_data_body(Basic_ostream *ostream) override;
+
+    int save_field_metadata();
 
     /** Constants representing offsets */
     enum Table_map_event_offset {
@@ -46,14 +55,14 @@ class Table_map_event : public AbstractEvent {
     std::string m_tblnam_;
     unsigned long long int m_tbllen_;
     unsigned long m_colcnt_;
-    unsigned char *m_coltype_;
-
+    //    unsigned char *m_coltype_;
+    std::unique_ptr<unsigned char[]> m_coltype_;
     /**
       The size of field metadata buffer set by calling save_field_metadata()
     */
     unsigned long m_field_metadata_size_;
-    unsigned char *m_field_metadata_; /** field metadata */
-    unsigned char *m_null_bits_;
+    std::unique_ptr<unsigned char[]> m_field_metadata_;
+    std::unique_ptr<unsigned char[]> m_null_bits_;
 
     unsigned long long get_table_id() { return m_table_id_.get_id(); }
 
@@ -61,24 +70,9 @@ class Table_map_event : public AbstractEvent {
 
     std::string get_db_name() { return m_dbnam_; }
 
-    // ********* impl virtual function *********************
-    size_t get_data_size() override { return m_data_size_; }
-
-    bool write_data_header(Basic_ostream *ostream) override;
-    bool write_data_body(Basic_ostream *ostream) override;
-
-    int save_field_metadata();
-
     // ********* log event field *********************
 
-    //    rapidjson::StringBuffer m_metadata_buf_; // Metadata fields buffer
-    /**
-      Wrapper around `TABLE *m_table` that abstracts the table field set
-      iteration logic
-     */
-    //    Table_columns_view<> m_column_view_{nullptr};
-
-    std::vector<mysql::Field*> m_column_view_; // Table field set
+    std::vector<mysql::FieldRef> m_column_view_; // Table field set
 };
 
 #endif // LOFT_ROWS_EVENT_H

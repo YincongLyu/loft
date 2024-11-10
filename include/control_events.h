@@ -22,6 +22,18 @@
 */
 class Format_description_event : public AbstractEvent {
   public:
+    Format_description_event(uint8_t binlog_ver, const char *server_ver);
+    ~Format_description_event() override;
+
+    DISALLOW_COPY(Format_description_event);
+
+    // ********* impl virtual function *********************
+    size_t get_data_size() override {
+        return AbstractEvent::FORMAT_DESCRIPTION_HEADER_LEN;
+    }
+    bool write(Basic_ostream *ostream) override;
+
+  public:
     uint16_t binlog_version_;
     /* 每个版本的固定值，不可修改，否则在 replication 时会出错, 目前暂时为 empty
      */
@@ -30,24 +42,8 @@ class Format_description_event : public AbstractEvent {
     uint8_t common_header_len_;
     std::vector<uint8_t> post_header_len_;
 
-    /**
-      Constructor. 同时 初始化 common-header 和 common-footer 对象
-    */
-    Format_description_event(uint8_t binlog_ver, const char *server_ver);
-
-    Format_description_event(const Format_description_event &) = default;
-    Format_description_event &
-    operator=(const Format_description_event &) = default;
     uint8_t number_of_event_types;
 
-    ~Format_description_event() override;
-
-    // ********* impl virtual function *********************
-    size_t get_data_size() override {
-        return AbstractEvent::FORMAT_DESCRIPTION_HEADER_LEN;
-    }
-
-    bool write(Basic_ostream *ostream) override;
 };
 
 /*
@@ -64,16 +60,17 @@ class Format_description_event : public AbstractEvent {
 
 class Previous_gtids_event : public AbstractEvent {
   public:
-    /**
-        Constructor
-     */
     // TODO add class Gtid_set
     Previous_gtids_event(const Gtid_set *set);
-
-    /**
-        Deconstructor
-     */
     ~Previous_gtids_event() override;
+
+    DISALLOW_COPY(Previous_gtids_event);
+
+    // ********* impl virtual function *********************
+    size_t get_data_size() override { return buf_size_; }
+
+    bool write(Basic_ostream *ostream) override;
+    bool write_data_body(Basic_ostream *ostream) override;
 
     const uchar *get_buf() { return buf_; }
 
@@ -86,12 +83,6 @@ class Previous_gtids_event : public AbstractEvent {
     //    int add_to_set(Gtid_set *gtid_set) const;
 
     size_t get_encoded_length() const;
-
-    // ********* impl virtual function *********************
-    size_t get_data_size() override { return buf_size_; }
-
-    bool write(Basic_ostream *ostream) override;
-    bool write_data_body(Basic_ostream *ostream) override;
 
   protected:
     size_t buf_size_;
@@ -118,6 +109,41 @@ struct gtid_info {
 
 class Gtid_event : public AbstractEvent {
   public:
+    Gtid_event(
+        long long int last_committed_arg,
+        long long int sequence_number_arg,
+        bool may_have_sbr_stmts_arg,
+        unsigned long long int original_commit_timestamp_arg,
+        unsigned long long int immediate_commit_timestamp_arg,
+        uint32_t original_server_version_arg,
+        uint32_t immediate_server_version_arg
+    );
+
+    ~Gtid_event() override;
+    DISALLOW_COPY(Gtid_event);
+
+    // ********* impl virtual function *********************
+    size_t get_data_size() override;
+    bool write(Basic_ostream *ostream) override;
+    bool write_data_header(Basic_ostream *ostream) override;
+    bool write_data_body(Basic_ostream *ostream) override;
+
+  private:
+    /**
+    固定长度：Gtid_log_event::POST_HEADER_LENGTH.
+  */
+    uint32_t write_post_header_to_memory(uchar *buffer);
+
+    /**
+      @return The number of bytes written, i.e.,
+              If the transaction did not originated on this server
+                Gtid_event::IMMEDIATE_COMMIT_TIMESTAMP_LENGTH.
+              else
+                FULL_COMMIT_TIMESTAMP_LENGTH.
+    */
+    uint32_t write_body_to_memory(uchar *buffer);
+
+  public:
     long long int last_committed_;
     long long int sequence_number_;
     /** GTID flags constants */
@@ -136,42 +162,6 @@ class Gtid_event : public AbstractEvent {
     Gtid_specification spec_;
     /// SID for this GTID.
     rpl_sid sid_;
-
-  public:
-    /**
-      Constructor.
-    */
-    Gtid_event(
-        long long int last_committed_arg,
-        long long int sequence_number_arg,
-        bool may_have_sbr_stmts_arg,
-        unsigned long long int original_commit_timestamp_arg,
-        unsigned long long int immediate_commit_timestamp_arg,
-        uint32_t original_server_version_arg,
-        uint32_t immediate_server_version_arg
-    );
-
-    ~Gtid_event() override;
-
-    // ********* impl virtual function *********************
-    size_t get_data_size() override;
-    bool write(Basic_ostream *ostream) override;
-    bool write_data_header(Basic_ostream *ostream) override;
-    bool write_data_body(Basic_ostream *ostream) override;
-
-    /**
-      固定长度：Gtid_log_event::POST_HEADER_LENGTH.
-    */
-    uint32_t write_post_header_to_memory(uchar *buffer);
-
-    /**
-      @return The number of bytes written, i.e.,
-              If the transaction did not originated on this server
-                Gtid_event::IMMEDIATE_COMMIT_TIMESTAMP_LENGTH.
-              else
-                FULL_COMMIT_TIMESTAMP_LENGTH.
-    */
-    uint32_t write_body_to_memory(uchar *buffer);
 
     /*
        第一个 bit 表示是否 启用 sync
@@ -299,6 +289,7 @@ class Xid_event : public AbstractEvent {
   public:
     Xid_event(uint64_t xid_arg);
     ~Xid_event() override = default;
+    DISALLOW_COPY(Xid_event);
 
     // ********* impl virtual function *********************
     size_t get_data_size() override { return sizeof(xid_); }
@@ -322,6 +313,26 @@ class Xid_event : public AbstractEvent {
  */
 class Rotate_event : public AbstractEvent {
   public:
+    Rotate_event(
+        const char *new_log_ident_arg,
+        size_t ident_len_arg,
+        unsigned int flags_arg,
+        uint64_t pos_arg
+    );
+
+    ~Rotate_event() override {
+        if (flags_ & DUP_NAME) {
+            free(const_cast<char *>(new_log_ident_));
+        }
+    }
+    DISALLOW_COPY(Rotate_event);
+
+    // ********* impl virtual function *********************
+    size_t get_data_size() override { return ident_len_ + ROTATE_HEADER_LEN; }
+
+    bool write(Basic_ostream *ostream) override;
+
+  public:
     const char *new_log_ident_; // nxt binlog file_name
     size_t ident_len_;          // nxt file_name length
     unsigned int flags_;
@@ -338,24 +349,6 @@ class Rotate_event : public AbstractEvent {
         R_POS_OFFSET = 0,
         R_IDENT_OFFSET = 8
     };
-
-    Rotate_event(
-        const char *new_log_ident_arg,
-        size_t ident_len_arg,
-        unsigned int flags_arg,
-        uint64_t pos_arg
-    );
-
-    ~Rotate_event() override {
-        if (flags_ & DUP_NAME) {
-            free(const_cast<char *>(new_log_ident_));
-        }
-    }
-
-    // ********* impl virtual function *********************
-    size_t get_data_size() override { return ident_len_ + ROTATE_HEADER_LEN; }
-
-    bool write(Basic_ostream *ostream) override;
 };
 
 #endif // LOFT_CONTROL_EVENTS_H

@@ -65,7 +65,7 @@ Table_map_event::Table_map_event(
     size_t dblen,
     const char *tblnam,
     size_t tbllen,
-    std::vector<mysql::Field *> &column_view
+    const std::vector<mysql::FieldRef> &column_view
 )
     : AbstractEvent(TABLE_MAP_EVENT)
     , m_table_id_(tid)
@@ -75,8 +75,8 @@ Table_map_event::Table_map_event(
     , m_tblnam_("")
     , m_tbllen_(tbllen)
     , m_colcnt_(colcnt)
-    , m_column_view_(column_view)
-    , /* json fields's size()*/
+    , m_column_view_(column_view) // 共享所有权
+    ,                             /* json fields's size()*/
     m_field_metadata_size_(0)
     , m_field_metadata_(nullptr)
     , m_null_bits_(nullptr) {
@@ -106,7 +106,8 @@ Table_map_event::Table_map_event(
     // 只是个临时值，没有实际含义，所有的信息都是从外部读取的
     // 但是为了做调度，所以 tid 还是要记下来，不用实时给外面响应
 
-    m_coltype_ = static_cast<unsigned char *>(malloc(colcnt));
+    m_coltype_ = std::make_unique<unsigned char[]>(colcnt);
+    memset(m_coltype_.get(), 0, colcnt);
     long pos = 0;
     for (auto &field : m_column_view_) {
         m_coltype_[pos++] = field->binlog_type();
@@ -122,8 +123,10 @@ Table_map_event::Table_map_event(
     m_data_size_ += (cbuf_end - cbuf) + m_colcnt_; // COLCNT and column types
 
     // 3. 得到每个 Field 的元数据
-    m_field_metadata_ = static_cast<unsigned char *>(malloc(m_colcnt_ * 4));
-    memset(m_field_metadata_, 0, m_colcnt_ * 4);
+    //    m_field_metadata_ = static_cast<unsigned char *>(malloc(m_colcnt_ *
+    //    4)); memset(m_field_metadata_, 0, m_colcnt_ * 4);
+    m_field_metadata_ = std::make_unique<unsigned char[]>(m_colcnt_ * 4);
+    memset(m_field_metadata_.get(), 0, m_colcnt_ * 4);
     m_field_metadata_size_ =
         save_field_metadata(); // 同时也填充了 m_field_metadata_
     if (m_field_metadata_size_ < 251) {
@@ -136,9 +139,11 @@ Table_map_event::Table_map_event(
     uint num_null_bytes = (m_colcnt_ + 7) / 8;
     m_data_size_ += num_null_bytes;
 
-    m_null_bits_ = static_cast<unsigned char *>(malloc(num_null_bytes));
-    memset(m_null_bits_, 0, num_null_bytes);
-    Bit_writer bit_writer{this->m_null_bits_};
+    //    m_null_bits_ = static_cast<unsigned char *>(malloc(num_null_bytes));
+    //    memset(m_null_bits_, 0, num_null_bytes);
+    m_null_bits_ = std::make_unique<unsigned char[]>(num_null_bytes);
+    memset(m_null_bits_.get(), 0, num_null_bytes);
+    Bit_writer bit_writer{this->m_null_bits_.get()};
 
     for (auto &field : m_column_view_) {
         bit_writer.set(field->is_nullable());
@@ -146,7 +151,7 @@ Table_map_event::Table_map_event(
 
     LOG_INFO("table_map_event data size: %zu", m_data_size_);
 
-    this->common_header_ = new EventCommonHeader();
+    this->common_header_ = std::make_unique<EventCommonHeader>();
     //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
@@ -205,9 +210,9 @@ bool Table_map_event::write_data_body(Basic_ostream *ostream) {
            && ostream->write(tbuf, (size_t)(tbuf_end - tbuf))
            && ostream->write((const uchar *)m_tblnam_.c_str(), m_tbllen_ + 1)
            && ostream->write(cbuf, (size_t)(cbuf_end - cbuf))
-           && ostream->write(m_coltype_, m_colcnt_)
+           && ostream->write(m_coltype_.get(), m_colcnt_)
            && ostream->write(mbuf, (size_t)(mbuf_end - mbuf))
-           && ostream->write(m_field_metadata_, m_field_metadata_size_)
-           && ostream->write(m_null_bits_, (m_colcnt_ + 7) / 8);
+           && ostream->write(m_field_metadata_.get(), m_field_metadata_size_)
+           && ostream->write(m_null_bits_.get(), (m_colcnt_ + 7) / 8);
     // 最后一个 m_optional_metadata_len, m_optional_metadata 可以暂时不管
 }

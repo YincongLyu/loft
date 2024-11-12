@@ -314,14 +314,14 @@ bool Xid_event::write(Basic_ostream *ostream) {
 // FIXME 现在是直接把 pos = 4，如果前一个文件空间不足，直接忽略文件后面的部分
 
 Rotate_event::Rotate_event(
-    const char *new_log_ident_arg,
+    const std::string &new_log_ident_arg,
     size_t ident_len_arg,
     unsigned int flags_arg,
     uint64_t pos_arg
 )
     : AbstractEvent(ROTATE_EVENT)
     , new_log_ident_(new_log_ident_arg)
-    , ident_len_(ident_len_arg ? ident_len_arg : strlen(new_log_ident_arg))
+    , ident_len_(ident_len_arg ? ident_len_arg : new_log_ident_arg.length())
     , flags_(flags_arg) /* DUP_NAME */
     , pos_(pos_arg) {   /* 4 byte */
 
@@ -335,6 +335,6 @@ bool Rotate_event::write(Basic_ostream *ostream) {
     return write_common_header(ostream, get_data_size())
            && ostream->write((uchar *)buf, AbstractEvent::ROTATE_HEADER_LEN)
            && ostream->write(
-               pointer_cast<const uchar *>(new_log_ident_), (uint)ident_len_
+               pointer_cast<const uchar *>(new_log_ident_.c_str()), (uint)ident_len_
            );
 }

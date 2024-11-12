@@ -2,8 +2,7 @@
 // Created by Coonger on 2024/10/16.
 //
 
-#ifndef LOFT_CONTROL_EVENTS_H
-#define LOFT_CONTROL_EVENTS_H
+#pragma once
 
 #include "abstract_event.h"
 #include "rpl_gtid.h"
@@ -314,17 +313,13 @@ class Xid_event : public AbstractEvent {
 class Rotate_event : public AbstractEvent {
   public:
     Rotate_event(
-        const char *new_log_ident_arg,
+        const std::string &new_log_ident_arg,
         size_t ident_len_arg,
         unsigned int flags_arg,
         uint64_t pos_arg
     );
 
-    ~Rotate_event() override {
-        if (flags_ & DUP_NAME) {
-            free(const_cast<char *>(new_log_ident_));
-        }
-    }
+    ~Rotate_event() override = default; // 使用 string 自动管理 file_name 内存
     DISALLOW_COPY(Rotate_event);
 
     // ********* impl virtual function *********************
@@ -333,7 +328,7 @@ class Rotate_event : public AbstractEvent {
     bool write(Basic_ostream *ostream) override;
 
   public:
-    const char *new_log_ident_; // nxt binlog file_name
+    const std::string new_log_ident_; // nxt binlog file_name
     size_t ident_len_;          // nxt file_name length
     unsigned int flags_;
     uint64_t pos_;
@@ -351,4 +346,3 @@ class Rotate_event : public AbstractEvent {
     };
 };
 
-#endif // LOFT_CONTROL_EVENTS_H

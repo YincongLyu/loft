@@ -40,7 +40,9 @@ RC Binlog_ofile::flush() {
     return sync();
 }
 
-Binlog_ofile::Binlog_ofile(const char *binlog_name, RC &rc) : m_position_(0) {
+
+Binlog_ofile::Binlog_ofile(const char *binlog_name, RC &rc) {
+    // position 不能直接初始化为 0，可能当前要写入的文件是 继续最后一个文件写
     if (open(binlog_name)) {
         rc = RC::FILE_OPEN;
     } else {

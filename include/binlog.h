@@ -2,8 +2,7 @@
 // Created by Coonger on 2024/10/17.
 //
 
-#ifndef LOFT_BINLOG_H
-#define LOFT_BINLOG_H
+#pragma once
 
 #include "abstract_event.h"
 #include "basic_ostream.h"
@@ -38,24 +37,24 @@ class TC_LOG {
 // 暂时不考虑 index 文件、lock
 class MYSQL_BIN_LOG : TC_LOG {
   public:
-    //    explicit MYSQL_BIN_LOG(std::unique_ptr<Basic_ostream> ostream)
-    //        :
-    //        m_binlog_file_(std::unique_ptr<Binlog_ofile>(dynamic_cast<Binlog_ofile*>(ostreamelease())))
-    //        {}
     MYSQL_BIN_LOG(const char *file_name, uint64_t file_size, RC &rc);
     ~MYSQL_BIN_LOG() override = default;
 
   public:
     //********************* common file operation *************************
     RC open() override;  // 构造函数
-    RC close() override; // 析构函数
+    RC close() override; // 析构函数调用
 
     void flush() { m_binlog_file_->flush(); }
 
     //********************* file write operation *************************
     bool write_event_to_binlog(AbstractEvent *ev);
 
-    void add_bytes_written(loft::my_off_t inc) { bytes_written_ += inc; }
+//    void add_bytes_written(loft::my_off_t inc) { bytes_written_ += inc; }
+    bool remain_bytes_safe() {
+        return m_binlog_file_->get_position() < max_size_ - WRITE_THRESHOLD;
+    }
+    uint64_t get_bytes_written() { return m_binlog_file_->get_position(); }
 
     void reset_bytes_written() { bytes_written_ = 0; }
 
@@ -75,4 +74,3 @@ class MYSQL_BIN_LOG : TC_LOG {
     std::unique_ptr<Binlog_ofile> m_binlog_file_;
 };
 
-#endif // LOFT_BINLOG_H

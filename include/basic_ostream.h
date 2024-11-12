@@ -3,8 +3,7 @@
 //
 
 // copy from sql/basic_ostream.h
-#ifndef LOFT_BASIC_OSTREAM_H
-#define LOFT_BASIC_OSTREAM_H
+#pragma once
 
 #include "constants.h"
 #include "rc.h"
@@ -46,16 +45,17 @@ class Binlog_ofile : public Basic_ostream {
 
     bool is_open() const { return m_pipeline_head_ != nullptr; }
 
-  private:
     bool open(const char *binlog_name) {
         std::unique_ptr<std::fstream> file_ostream =
             std::make_unique<std::fstream>(
-                binlog_name, std::ios::out | std::ios::binary
+                binlog_name, std::ios::in | std::ios::out | std::ios::binary | std::ios::app
             );
         if (!file_ostream->is_open()) {
             return false;
         }
-
+        // 移动到文件末尾
+        file_ostream->seekp(0, std::ios::end);
+        m_position_ = file_ostream->tellp();
         m_pipeline_head_ = std::move(file_ostream);
         return true;
     }
@@ -73,4 +73,3 @@ class Binlog_ofile : public Basic_ostream {
     std::unique_ptr<std::fstream> m_pipeline_head_;
 };
 
-#endif // LOFT_BASIC_OSTREAM_H

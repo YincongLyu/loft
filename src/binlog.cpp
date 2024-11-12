@@ -30,31 +30,35 @@ RC MYSQL_BIN_LOG::open() {
 
     atomic_log_state_ = LOG_OPENED;
 
-    // Step 2: 如果打开的是一个空文件，就会先写一个 magic number
+    // Step 2: 如果打开的是一个空文件，就会先写一个 magic number 和 一个 fde
     if (m_binlog_file_->is_empty()) {
         bool w_ok = m_binlog_file_->write(
             reinterpret_cast<const loft::uchar *>(BINLOG_MAGIC),
             BIN_LOG_HEADER_SIZE
         );
 
-        if (!w_ok) {
-            LOG_ERROR("Failed to write magic number to binlog.");
+        auto fde = std::make_unique<Format_description_event>(BINLOG_VERSION, SERVER_VERSION_STR);
+        bool w_ok2 = write_event_to_binlog(fde.get());
+
+        if (!w_ok || !w_ok2) {
+            LOG_ERROR("Failed to write magic number and fde to binlog start");
             return RC::IOERR_WRITE;
         }
-
-        add_bytes_written(BIN_LOG_HEADER_SIZE);
+        // 不用在 binlog file 层面手动维护 bytes_written_，因为在 write_event_to_binlog 里 文件流的write函数已经维护 m_position了
+//        add_bytes_written(BIN_LOG_HEADER_SIZE + LOG_EVENT_HEADER_LEN + fde->get_data_size());
     }
 
-    return RC::FILE_OPEN;
+    return RC::SUCCESS;
 }
 
 RC MYSQL_BIN_LOG::close() {
     if (atomic_log_state_ == LOG_OPENED) {
         atomic_log_state_ = LOG_CLOSED;
     }
-
     reset_bytes_written();
-    return RC::FILE_CLOSE;
+    m_binlog_file_->sync();
+    m_binlog_file_->close();
+    return RC::SUCCESS;
 }
 
 bool MYSQL_BIN_LOG::write_event_to_binlog(AbstractEvent *ev) {

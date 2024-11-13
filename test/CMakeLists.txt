@@ -1,4 +1,4 @@
-# 将 data 文件复制到构建目录
+#将 data 文件复制到构建目录
 configure_file(${CMAKE_SOURCE_DIR}/data ${CMAKE_BINARY_DIR}/test/data COPYONLY)
 
 include(GoogleTest)
@@ -11,7 +11,7 @@ foreach(F ${SRC_TEST}) # unit tests
     message(STATUS "+ " ${F})
     add_executable(${R} ${F})
 
-    # Link with gtest and bloomstore
+    # Link with gtest and loft
     target_link_libraries(${R} gtest gtest_main loft)
 
     set_target_properties(${R}
@@ -19,7 +19,8 @@ foreach(F ${SRC_TEST}) # unit tests
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/test
         COMMAND ${R}
     )
+
+    # Enable CTest for unit tests
+    gtest_discover_tests(${R})
 endforeach()
 
-# Enable CTest for unit tests
-gtest_discover_tests(${R})

@@ -1,9 +1,7 @@
 //
 // Created by Coonger on 2024/10/28.
 //
-
-#ifndef LOFT_MYSQL_FIELDS_H
-#define LOFT_MYSQL_FIELDS_H
+#pragma once
 
 #include <cassert>
 #include <climits>
@@ -17,10 +15,11 @@
 #include <algorithm>
 #include <optional>
 
-#include "../common/macros.h"
-#include "constants.h"
-#include "field_common_properties.h"
-#include "field_types.h" // enum_field_types
+#include "common/macros.h"
+#include "common/type_def.h"
+
+#include "sql/field_common_properties.h"
+#include "sql/field_types.h" // enum_field_types
 
 namespace mysql {
 
@@ -819,7 +818,7 @@ class Field_set final : public Field_enum {
     enum_field_types real_type() const final { return MYSQL_TYPE_SET; }
 
   private:
-    const loft::MYSQL_LEX_CSTRING empty_set_string;
+    const MYSQL_LEX_CSTRING empty_set_string;
 };
 
 class Field_bit : public Field {
@@ -898,4 +897,4 @@ inline bool is_temporal_real_type(enum_field_types type) {
 }
 
 }
-#endif // LOFT_MYSQL_FIELDS_H
+

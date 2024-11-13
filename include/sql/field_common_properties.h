@@ -1,5 +1,5 @@
-#ifndef FIELD_COMMON_OPERATIONS_INCLUDED
-#define FIELD_COMMON_OPERATIONS_INCLUDED
+
+#pragma once
 
 #include "field_types.h"
 
@@ -255,5 +255,3 @@ struct TYPELIB {               /* Different types saved here */
 //    unsigned int *type_lengths{nullptr};
 
 };
-
-#endif /* FIELD_COMMON_OPERATIONS_INCLUDED */

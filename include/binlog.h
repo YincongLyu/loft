@@ -4,13 +4,18 @@
 
 #pragma once
 
-#include "abstract_event.h"
+#include <atomic>
+
+#include "events/abstract_event.h"
+#include "events/control_events.h"
+
 #include "basic_ostream.h"
 #include "constants.h"
-#include "control_events.h"
-#include "logging.h"
-#include "rc.h"
-#include <atomic>
+
+#include "common/logging.h"
+#include "common/rc.h"
+#include "common/init_setting.h"
+
 
 /**
   Transaction Coordinator Log.
@@ -58,7 +63,7 @@ class MYSQL_BIN_LOG : TC_LOG {
 
     void reset_bytes_written() { bytes_written_ = 0; }
 
-    void update_binlog_end_pos(const char *file, loft::my_off_t pos);
+    void update_binlog_end_pos(const char *file, my_off_t pos);
 
   private:
     enum enum_log_state_ { LOG_OPENED, LOG_CLOSED, LOG_TO_BE_OPENED };
@@ -69,7 +74,7 @@ class MYSQL_BIN_LOG : TC_LOG {
     // 当前 binlog file 写到一定大小时，触发写入 rotate event
     uint64_t max_size_; // binlog 文件最大大小
 
-    loft::my_off_t bytes_written_; // binlog 文件当前写入大小
+    my_off_t bytes_written_; // binlog 文件当前写入大小
 
     std::unique_ptr<Binlog_ofile> m_binlog_file_;
 };

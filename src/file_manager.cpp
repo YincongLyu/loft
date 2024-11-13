@@ -1,17 +1,19 @@
 #include "file_manager.h"
 #include "binlog.h"
 
-#include "sql/base64.h"
-#include "control_events.h"
-#include "ddl_generated.h"
-#include "dml_generated.h"
-#include "mysql_fields.h"
-#include "rows_event.h"
-#include "statement_events.h"
-#include "write_event.h"
+#include "format/ddl_generated.h"
+#include "format/dml_generated.h"
 
-#include "logging.h"
-#include "macros.h"
+#include "events/control_events.h"
+#include "events/rows_event.h"
+#include "events/statement_events.h"
+#include "events/write_event.h"
+
+#include "utils/base64.h"
+#include "sql/mysql_fields.h"
+
+#include "common/logging.h"
+#include "common/macros.h"
 
 #include <chrono>
 #include <ctime>
@@ -23,7 +25,6 @@
 #include <iostream>
 #include <map>
 
-namespace loft {
 using pib = std::pair<int, bool>;
 
 // ss >> std::get_time(&timeStruct, "%Y-%m-%d %H:%M:%S.%f");
@@ -99,35 +100,35 @@ std::string formatDoubleToFixedWidth(double number, int length, int frac) {
     return str;
 }
 
-auto LogFormatTransformManager::readSQLN(int nowTestCase
-) -> std::unique_ptr<char[]> {
-    int curSqlStart = nowTestCase * intOffset_;
-    for (int i = 0; i < nowTestCase - 1; i++) {
-        curSqlStart += loft::SQL_SIZE_ARRAY[i];
-    }
-    int curSqlLen = loft::SQL_SIZE_ARRAY[nowTestCase - 1];
-
-    std::ifstream file(filepath_, std::ios::binary);
-    if (!file) {
-        std::cerr << "无法打开文件：" << filepath_ << std::endl;
-        return {};
-    }
-
-    // 将文件指针移动到指定的偏移量
-    file.seekg(curSqlStart, std::ios::beg);
-
-    // 创建一个 unique_ptr 来存储读取的字节
-    auto binaryData = std::make_unique<char[]>(curSqlLen);
-    // 从当前文件指针位置读取 len 个字节到 buffer 数组
-    file.read(binaryData.get(), curSqlLen);
-
-    if (file.gcount() == curSqlLen) {
-        return binaryData;
-    } else {
-        std::cerr << "读取失败或已到文件末尾" << std::endl;
-        return {};
-    }
-}
+//auto LogFormatTransformManager::readSQLN(int nowTestCase
+//) -> std::unique_ptr<char[]> {
+//    int curSqlStart = nowTestCase * intOffset_;
+//    for (int i = 0; i < nowTestCase - 1; i++) {
+//        curSqlStart += loft::SQL_SIZE_ARRAY[i];
+//    }
+//    int curSqlLen = loft::SQL_SIZE_ARRAY[nowTestCase - 1];
+//
+//    std::ifstream file(filepath_, std::ios::binary);
+//    if (!file) {
+//        std::cerr << "无法打开文件：" << filepath_ << std::endl;
+//        return {};
+//    }
+//
+//    // 将文件指针移动到指定的偏移量
+//    file.seekg(curSqlStart, std::ios::beg);
+//
+//    // 创建一个 unique_ptr 来存储读取的字节
+//    auto binaryData = std::make_unique<char[]>(curSqlLen);
+//    // 从当前文件指针位置读取 len 个字节到 buffer 数组
+//    file.read(binaryData.get(), curSqlLen);
+//
+//    if (file.gcount() == curSqlLen) {
+//        return binaryData;
+//    } else {
+//        std::cerr << "读取失败或已到文件末尾" << std::endl;
+//        return {};
+//    }
+//}
 
 auto LogFormatTransformManager::readFileAsBinary(const std::string &filePath
 ) -> std::pair<std::unique_ptr<char[]>, unsigned long long> {
@@ -138,9 +139,6 @@ auto LogFormatTransformManager::readFileAsBinary(const std::string &filePath
     }
 
     // 获取文件大小，使用 unsigned long long 确保足够的容量
-    // file.tellg() 返回类型是
-    // std::streamsize，通常是一个带符号整数类型，具体实现可能为 long 或 long
-    // long
     unsigned long long size = static_cast<unsigned long long>(file.tellg());
     if (size == 0) {
         throw std::runtime_error("File is empty");
@@ -178,12 +176,12 @@ void LogFormatTransformManager::transformDDL(
     auto lastCommit = ddl->last_commit();
     auto txSeq = ddl->tx_seq();
 
-    unsigned long long int i_ts = stringToTimestamp(immediateCommitTs->c_str());
-    unsigned long long int o_ts = stringToTimestamp(originalCommitTs->c_str());
+    uint64 i_ts = stringToTimestamp(immediateCommitTs->c_str());
+    uint64 o_ts = stringToTimestamp(originalCommitTs->c_str());
 
     //    std::cout << originalCommitTs->c_str() << " " << o_ts << std::endl;
 
-    auto ge = std::make_unique<Gtid_event>(
+    auto gtidEvent = std::make_unique<Gtid_event>(
         lastCommit, txSeq, true, o_ts, i_ts, ORIGINAL_SERVER_VERSION,
         IMMEDIATE_SERVER_VERSION
     );
@@ -201,18 +199,18 @@ void LogFormatTransformManager::transformDDL(
     uint32_t query_length = strlen(query_arg);
     LOG_INFO("query_: %s, query_len: %d", query_arg, query_length);
 
-    unsigned long thread_id_arg = THREAD_ID;
-    unsigned long long sql_mode_arg = 0;             // 随意
-    unsigned long auto_increment_increment_arg = 0;  // 随意
-    unsigned long auto_increment_offset_arg = 0;     // 随意
-    unsigned int number = 0;                         // 一定要
-    unsigned long long table_map_for_update_arg = 0; // 随意
+    uint64 thread_id_arg = THREAD_ID;
+    uint32 sql_mode_arg = 0;             // 随意
+    uint32 auto_increment_increment_arg = 0;  // 随意
+    uint32 auto_increment_offset_arg = 0;     // 随意
+    uint32 number = 0;                         // 一定要
+    uint64 table_map_for_update_arg = 0; // 随意
     int errcode = ERROR_CODE;
 
-    auto qe = std::make_unique<Query_event>(
+    auto queryEvent = std::make_unique<Query_event>(
         query_arg, catalog_arg, db_arg, txSeq, query_length, thread_id_arg,
         sql_mode_arg, auto_increment_increment_arg, auto_increment_offset_arg,
-        number, table_map_for_update_arg, errcode
+        number, table_map_for_update_arg, errcode, i_ts
     );
 
     // ******* print debug info **************************
@@ -232,8 +230,8 @@ void LogFormatTransformManager::transformDDL(
     }
     // ******************************************************************
 
-    binLog->write_event_to_binlog(ge.get());
-    binLog->write_event_to_binlog(qe.get());
+    binLog->write_event_to_binlog(gtidEvent.get());
+    binLog->write_event_to_binlog(queryEvent.get());
 }
 
 enum_field_types
@@ -634,4 +632,3 @@ void LogFormatTransformManager::transformDML(
     binLog->write_event_to_binlog(xe.get());
 }
 
-} // namespace loft

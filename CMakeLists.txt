@@ -17,7 +17,7 @@ option(LOFT_TESTING "Build unit tests" YES) # for test
 if(NDEBUG)
     add_compile_options(
         -O3 -Werror -Wno-attributes
-        -DNDEBUG=1
+            -DNDEBUG=1
         -DPROJECT_VERSION=""
         -DEVMONE_X86_64_ARCH_LEVEL=2
     )
@@ -38,16 +38,15 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # -- Includes
 include_directories(${PROJECT_SOURCE_DIR}/include)
-include_directories(${PROJECT_SOURCE_DIR}/include/common)
-include_directories(${PROJECT_SOURCE_DIR}/include/sql)
+#INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/deps /usr/local/common/include/deps)
+
 # -- third Libraries
-# 设置 RapidJSON 目录
-set(RAPIDJSON_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/third_party/rapidjson/include")
-# 将 RapidJSON 添加到项目的 include 路径
-include_directories(${RAPIDJSON_INCLUDE_DIR})
+add_subdirectory(deps)
 
 # Add subdirectory for source
 add_subdirectory(src)
+
+add_subdirectory(bin)
 
 # Manage testing option
 if(LOFT_TESTING)

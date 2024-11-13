@@ -3,9 +3,7 @@
   @file field_types.h
     refer from: mysql/include/field_types.h
 */
-
-#ifndef FIELD_TYPES_INCLUDED
-#define FIELD_TYPES_INCLUDED
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,4 +55,3 @@ extern "C" {
 typedef enum enum_field_types enum_field_types;
 #endif /* __cplusplus */
 
-#endif /* FIELD_TYPES_INCLUDED */

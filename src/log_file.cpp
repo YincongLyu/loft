@@ -2,10 +2,10 @@
 // Created by Coonger on 2024/11/10.
 //
 
-#include <fcntl.h> // ::open
+#include <fcntl.h>   // ::open
+#include <charconv>  // std::from_chars
+#include <string_view>  // std::string_view
 
-#include "common/lang/string_view.h"
-#include "common/lang/charconv.h"
 #include "log_file.h"
 //#include "common/io/io.h"
 
@@ -32,7 +32,7 @@ auto RedoLogFileReader::close() -> RC {
     return RC::SUCCESS;
 }
 
-auto RedoLogFileReader::readFromFile(const string &fileName)
+auto RedoLogFileReader::readFromFile(const std::string &fileName)
     -> std::pair<std::unique_ptr<char[]>, size_t> {
     FILE *file = fopen(fileName.c_str(), "rb");
     if (file == nullptr) {
@@ -113,16 +113,16 @@ RC BinLogFileWriter::close()
 
 RC LogFileManager::init(const char *directory, const char *file_name_prefix, uint64_t max_file_size_per_file) {
 
-    directory_ = filesystem::absolute(filesystem::path(directory));
+    directory_ = std::filesystem::absolute(std::filesystem::path(directory));
     file_prefix_ = file_name_prefix;
     max_file_size_per_file_ = max_file_size_per_file;
 
     // 检查目录是否存在，不存在就创建出来
-    if (!filesystem::is_directory(directory_)) {
+    if (!std::filesystem::is_directory(directory_)) {
         LOG_INFO("directory is not exist. directory=%s", directory_.c_str());
 
-        error_code ec;
-        bool ret = filesystem::create_directories(directory_, ec);
+        std::error_code ec;
+        bool ret = std::filesystem::create_directories(directory_, ec);
         if (!ret) {
             LOG_ERROR("create directory failed. directory=%s, error=%s", directory_.c_str(), ec.message().c_str());
             return RC::FILE_CREATE;
@@ -130,12 +130,12 @@ RC LogFileManager::init(const char *directory, const char *file_name_prefix, uin
     }
 
     // 列出所有的日志文件
-    for (const filesystem::directory_entry &dir_entry : filesystem::directory_iterator(directory_)) {
+    for (const std::filesystem::directory_entry &dir_entry : std::filesystem::directory_iterator(directory_)) {
         if (!dir_entry.is_regular_file()) {
             continue;
         }
 
-        string filename = dir_entry.path().filename().string();
+        std::string filename = dir_entry.path().filename().string();
         // TODO
         uint32_t fileno = 0;
         RC rc = get_fileno_from_filename(filename, fileno);
@@ -159,16 +159,16 @@ RC LogFileManager::init(const char *directory, const char *file_name_prefix, uin
 }
 
 RC LogFileManager::get_fileno_from_filename(
-    const string &filename, uint32_t &fileno
+    const std::string &filename, uint32_t &fileno
 ) {
 
     if (!filename.starts_with(file_prefix_)) {
         return RC::INVALID_ARGUMENT;
     }
 
-    string_view lsn_str(filename.data() + strlen(file_prefix_) + 1, filename.length() - strlen(file_prefix_) - 1);
-    from_chars_result result = from_chars(lsn_str.data(), lsn_str.data() + lsn_str.size(), fileno);
-    if (result.ec != errc()) {
+    std::string_view lsn_str(filename.data() + strlen(file_prefix_) + 1, filename.length() - strlen(file_prefix_) - 1);
+    std::from_chars_result result = std::from_chars(lsn_str.data(), lsn_str.data() + lsn_str.size(), fileno);
+    if (result.ec != std::errc()) {
         LOG_INFO("invalid log file name: cannot calc lsn. filename=%s, error=%s",
                   filename.c_str(), strerror(static_cast<int>(result.ec)));
         return RC::INVALID_ARGUMENT;
@@ -258,8 +258,8 @@ RC LogFileManager::next_file(BinLogFileWriter &file_writer) {
     oss << std::setw(6) << std::setfill('0') << fileno;
     file_suffix_ = oss.str();
 
-    string nextFilename = file_prefix_ + std::string(file_dot_) + file_suffix_;
-    filesystem::path next_file_path = directory_ / nextFilename;
+    std::string nextFilename = file_prefix_ + std::string(file_dot_) + file_suffix_;
+    std::filesystem::path next_file_path = directory_ / nextFilename;
 
     if (!log_files_.empty()) {
         auto nowFilename = log_files_.rbegin()->second.string();

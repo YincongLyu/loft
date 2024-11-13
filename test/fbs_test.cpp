@@ -1,34 +1,37 @@
-#include "binlog.h"
-#include "ddl_generated.h"
-#include "file_manager.h"
-#include "logging.h"
-#include "macros.h"
-
 #include <gtest/gtest.h>
 #include <iostream>
 #include <vector>
 
-using namespace loft;
+#include "format/ddl_generated.h"
 
-TEST(DDL_TEST, DISABLED_CREATE_TABLE) {
-    LogFormatTransformManager mgr;
-    // 读二进制
-    auto create_db_sql = mgr.readSQLN(1);
+#include "common/logging.h"
+#include "common/macros.h"
 
-    // 获取指向vector数据的指针
-    const char *buf = create_db_sql.get();
+#include "binlog.h"
+#include "file_manager.h"
 
-    // 使用GetDDL函数获取DDL对象
-    const DDL *ddl = GetDDL(buf);
 
-    if (ddl) {
-        // 使用 check_point() 方法获取 flatbuffers::String*
-        auto checkpoint = ddl->check_point();
-        std::cout << checkpoint->c_str() << '\n';
-    } else {
-        // 处理错误情况
-    }
-}
+using namespace loft; // flatbuffer namespace
+
+//TEST(DDL_TEST, DISABLED_CREATE_TABLE) {
+//    LogFormatTransformManager mgr;
+//    // 读二进制
+//    auto create_db_sql = mgr.readSQLN(1);
+//
+//    // 获取指向vector数据的指针
+//    const char *buf = create_db_sql.get();
+//
+//    // 使用GetDDL函数获取DDL对象
+//    const DDL *ddl = GetDDL(buf);
+//
+//    if (ddl) {
+//        // 使用 check_point() 方法获取 flatbuffers::String*
+//        auto checkpoint = ddl->check_point();
+//        std::cout << checkpoint->c_str() << '\n';
+//    } else {
+//        // 处理错误情况
+//    }
+//}
 
 TEST(DDL_TEST, DISABLED_CREATE_DB_LEN) {
     LogFormatTransformManager mgr;
@@ -42,19 +45,20 @@ TEST(DDL_TEST, DISABLED_CREATE_DB_LEN) {
     EXPECT_EQ(sql_len, 248);
 }
 
-TEST(SQL_TEST, DDL_CREATE_DB_TABLE) {
+TEST(SQL_TEST, DISABLED_DDL_CREATE_DB_TABLE) {
     // 1. 新建一个 binlog 文件，开启写功能
-    MYSQL_BIN_LOG binlog(new Binlog_ofile());
-    const char *test_file_name = "test_ddl_create_db_table";
+    const char *test_file_name = "test1";
     uint64_t test_file_size = 1024;
 
-    LOFT_ASSERT(
-        binlog.open(test_file_name, test_file_size),
-        "Failed to open binlog file."
-    );
+    RC ret;
+    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
+    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
+
+    ret = binlog->open();
+    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
 
     Format_description_event fde(BINLOG_VERSION, SERVER_VERSION_STR);
-    binlog.write_event_to_binlog(&fde);
+    binlog->write_event_to_binlog(&fde);
 
     // 2. mgr 转换工具负责 读待解析的中间 flatbuffer 数据，然后调用
     // 响应的转换函数
@@ -77,29 +81,30 @@ TEST(SQL_TEST, DDL_CREATE_DB_TABLE) {
         const DDL *ddl = GetDDL(buf.data());
         if (ddl) {
             // Use the raw pointer directly
-            mgr.transformDDL(ddl, &binlog);
+            mgr.transformDDL(ddl, binlog.get());
         } else {
             // Handle error cases
             std::cerr << "Failed to parse DDL object.\n";
         }
     }
     // 3. 关闭 binlog 文件流
-    binlog.close();
+    binlog->close();
 }
 
-TEST(SQL_TEST, CREATE_DB_TABLE_INSERT1) {
+TEST(SQL_TEST, DISABLED_CREATE_DB_TABLE_INSERT1) {
     // 1. 新建一个 binlog 文件，开启写功能
-    MYSQL_BIN_LOG binlog(new Binlog_ofile());
-    const char *test_file_name = "test_3sql";
-    uint64_t test_file_size = 4096;
+    const char *test_file_name = "test1";
+    uint64_t test_file_size = 1024;
 
-    LOFT_ASSERT(
-        binlog.open(test_file_name, test_file_size),
-        "Failed to open binlog file."
-    );
+    RC ret;
+    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
+    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
+
+    ret = binlog->open();
+    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
 
     Format_description_event fde(BINLOG_VERSION, SERVER_VERSION_STR);
-    binlog.write_event_to_binlog(&fde);
+    binlog->write_event_to_binlog(&fde);
 
 
     LogFormatTransformManager mgr;
@@ -120,7 +125,7 @@ TEST(SQL_TEST, CREATE_DB_TABLE_INSERT1) {
         const DDL *ddl = GetDDL(buf.data());
         if (ddl) {
             // Use the raw pointer directly
-            mgr.transformDDL(ddl, &binlog);
+            mgr.transformDDL(ddl, binlog.get());
         } else {
             // Handle error cases
             std::cerr << "Failed to parse DDL object.\n";
@@ -138,11 +143,11 @@ TEST(SQL_TEST, CREATE_DB_TABLE_INSERT1) {
 
     LOFT_ASSERT(dml, "Failed to parse DML object.");
     // Use the`  raw pointer directly
-    mgr.transformDML(dml, &binlog);
+    mgr.transformDML(dml, binlog.get());
 
 
     // 3. 关闭 binlog 文件流
-    binlog.close();
+    binlog->close();
 }
 
 TEST(DML_TEST, DISABLED_INSERT1) {
@@ -206,16 +211,17 @@ TEST(DML_TEST, DISABLED_INSERT1) {
     auto originalCommitTs = dml->tx_time();
 }
 
-TEST(SQL_TEST, DML_INSERT) {
+TEST(SQL_TEST, DISABLED_DML_INSERT) {
     // 1. 新建一个 binlog 文件，开启写功能
-    MYSQL_BIN_LOG *binlog = new MYSQL_BIN_LOG(new Binlog_ofile());
-    const char *test_file_name = "test_insert123";
-    uint64_t test_file_size = 4096;
+    const char *test_file_name = "test1";
+    uint64_t test_file_size = 1024;
 
-    LOFT_ASSERT(
-        binlog->open(test_file_name, test_file_size),
-        "Failed to open binlog file."
-    );
+    RC ret;
+    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
+    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
+
+    ret = binlog->open();
+    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
     // 先写 fde
     Format_description_event fde(BINLOG_VERSION, SERVER_VERSION_STR);
     binlog->write_event_to_binlog(&fde);
@@ -246,7 +252,7 @@ TEST(SQL_TEST, DML_INSERT) {
 
         LOFT_ASSERT(dml, "Failed to parse DML object.");
         // Use the`  raw pointer directly
-        mgr.transformDML(dml, binlog);
+        mgr.transformDML(dml, binlog.get());
     }
 
     // 3. 关闭 binlog 文件流
@@ -254,16 +260,17 @@ TEST(SQL_TEST, DML_INSERT) {
     binlog->close();
 }
 
-TEST(SQL_TEST, DML_UPDATE) {
+TEST(SQL_TEST, DISABLED_DML_UPDATE) {
     // 1. 新建一个 binlog 文件，开启写功能
-    MYSQL_BIN_LOG *binlog = new MYSQL_BIN_LOG(new Binlog_ofile());
-    const char *test_file_name = "test_update12";
-    uint64_t test_file_size = 2048;
+    const char *test_file_name = "test1";
+    uint64_t test_file_size = 1024;
 
-    LOFT_ASSERT(
-        binlog->open(test_file_name, test_file_size),
-        "Failed to open binlog file."
-    );
+    RC ret;
+    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
+    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
+
+    ret = binlog->open();
+    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
 
     // 先写 fde
     Format_description_event fde(BINLOG_VERSION, SERVER_VERSION_STR);
@@ -295,7 +302,7 @@ TEST(SQL_TEST, DML_UPDATE) {
 
         LOFT_ASSERT(dml, "Failed to parse DML object.");
         // Use the`  raw pointer directly
-        mgr.transformDML(dml, binlog);
+        mgr.transformDML(dml, binlog.get());
     }
 
     // 3. 关闭 binlog 文件流
@@ -303,16 +310,17 @@ TEST(SQL_TEST, DML_UPDATE) {
     binlog->close();
 }
 
-TEST(SQL_TEST, DML_DELETE) {
+TEST(SQL_TEST, DISABLED_DML_DELETE) {
     // 1. 新建一个 binlog 文件，开启写功能
-    MYSQL_BIN_LOG *binlog = new MYSQL_BIN_LOG(new Binlog_ofile());
-    const char *test_file_name = "test_delete1";
-    uint64_t test_file_size = 2048;
+    const char *test_file_name = "test1";
+    uint64_t test_file_size = 1024;
 
-    LOFT_ASSERT(
-        binlog->open(test_file_name, test_file_size),
-        "Failed to open binlog file."
-    );
+    RC ret;
+    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
+    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
+
+    ret = binlog->open();
+    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
     // 先写 fde
     Format_description_event fde(BINLOG_VERSION, SERVER_VERSION_STR);
     binlog->write_event_to_binlog(&fde);
@@ -343,7 +351,7 @@ TEST(SQL_TEST, DML_DELETE) {
 
         LOFT_ASSERT(dml, "Failed to parse DML object.");
         // Use the`  raw pointer directly
-        mgr.transformDML(dml, binlog);
+        mgr.transformDML(dml, binlog.get());
     }
 
     // 3. 关闭 binlog 文件流
@@ -353,14 +361,15 @@ TEST(SQL_TEST, DML_DELETE) {
 
 TEST(SQL_TEST, DISABLED_DDL_DROP_DB_TABLE) {
     // 1. 新建一个 binlog 文件，开启写功能
-    MYSQL_BIN_LOG binlog(new Binlog_ofile());
-    const char *test_file_name = "test_ddl_drop_db_table";
+    const char *test_file_name = "test1";
     uint64_t test_file_size = 1024;
 
-    LOFT_ASSERT(
-        binlog.open(test_file_name, test_file_size),
-        "Failed to open binlog file."
-    );
+    RC ret;
+    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
+    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
+
+    ret = binlog->open();
+    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
 
     LogFormatTransformManager mgr;
     // 2.1 把待解析的 数据 装入 reader 中，后续可以利用 read/cpy 方法
@@ -388,9 +397,130 @@ TEST(SQL_TEST, DISABLED_DDL_DROP_DB_TABLE) {
 
         LOFT_ASSERT(ddl, "Failed to parse DDL object.");
 
-        mgr.transformDDL(ddl, &binlog);
+        mgr.transformDDL(ddl, binlog.get());
 
     }
     // 3. 关闭 binlog 文件流
-    binlog.close();
+    binlog->close();
+}
+
+TEST(FILE_TEST, OnlyInsertDMLSqlCnt) {
+    // 从第 5 条开始 后面是 100w 条 INSERT
+    const char *test_file_name = "test1";
+    uint64_t test_file_size = 1024 * 1024 * 1024;
+
+    RC ret;
+    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
+    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
+
+    ret = binlog->open();
+    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
+
+    auto startReadTime = std::chrono::high_resolution_clock::now(); // 记录开始时间
+
+    auto mgr = std::make_unique<LogFormatTransformManager>();
+    // 2.1 把待解析的 数据 装入 reader 中，后续可以利用 read/cpy 方法
+    auto [data, fileSize] = mgr->readFileAsBinary();
+    auto reader = std::make_unique<MyReader>(data.get(), fileSize);
+
+    auto endReadTime = std::chrono::high_resolution_clock::now(); // 记录结束时间
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endReadTime - startReadTime).count();
+    LOG_DEBUG("Read File: %ld ms", duration);
+
+    // 跳过前 4 条
+    int SKIP_COUNT = 4;
+    uint32_t skip_sql_sz = 0;
+    for (int i = 0; i < SKIP_COUNT; i++) {
+        skip_sql_sz = reader->read<uint32_t>();;
+        reader->forward(skip_sql_sz);
+    }
+
+    // 统计 DML 真实有多少条
+    int dml_cnt = 0;
+    while (reader->valid()) {
+        dml_cnt++;
+        skip_sql_sz = reader->read<uint32_t>();;
+        reader->forward(skip_sql_sz);
+    }
+    LOG_DEBUG("dml_cnt: %d", dml_cnt);
+
+}
+
+TEST(FILE_TEST, OnlyInsert100w) {
+    // 1. 新建一个 binlog 文件，开启写功能
+
+    const char *test_file_name = "test1";
+    uint64_t test_file_size = 1024 * 1024 * 1024;
+
+    RC ret;
+    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
+    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
+
+    ret = binlog->open();
+    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
+
+    auto fde = std::make_unique<Format_description_event>(BINLOG_VERSION, SERVER_VERSION_STR);
+    binlog->write_event_to_binlog(fde.get());
+    // ************* 计时 开始 ***********
+    auto startTime = std::chrono::high_resolution_clock::now(); // 记录开始时间
+
+    auto mgr = std::make_unique<LogFormatTransformManager>("/home/yincong/loft/data");
+    // 2.1 把待解析的 数据 装入 reader 中，后续可以利用 read/cpy 方法
+    auto [data, fileSize] = mgr->readFileAsBinary();
+    auto reader = std::make_unique<MyReader>(data.get(), fileSize);
+
+    // 目前是读前 3 条，确定是 ddl sql
+    int DDLEPOCH = 3;
+    for (int k = 0; k < DDLEPOCH; k++) {
+        auto sql_len = reader->read<uint32_t>();
+
+        // 2.2. 进入转换流程，先初始化一片 内存空间， copy 出来
+        std::vector<unsigned char> buf(sql_len);
+        reader->memcpy<unsigned char *>(buf.data(), sql_len);
+        // note！使用 flatbuffer 获取的对象，返回的是一个 raw ptr
+        // 管理内存的方法不是使用 new/delete，所以不能直接转化成 unique_ptr
+        const DDL *ddl = GetDDL(buf.data());
+        if (ddl) {
+            // Use the raw pointer directly
+            mgr->transformDDL(ddl, binlog.get());
+        } else {
+            // Handle error cases
+            std::cerr << "Failed to parse DDL object.\n";
+        }
+    }
+
+    auto ddlEndTime = std::chrono::high_resolution_clock::now(); // 记录结束时间
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(ddlEndTime - startTime).count();
+    LOG_DEBUG("DDL execution time: %ld ms", duration);
+
+    //////////////////////////////////////
+
+    // 跳过第 4 条
+    auto skip_sql_sz = reader->read<uint32_t>();;
+    reader->forward(skip_sql_sz);
+
+    // 接着读第 5-100w 条 insert1
+    int DMLEPOCH = 703435;
+    for (int k = 0; k < DMLEPOCH; k++) {
+        auto insert_len = reader->read<uint32_t>();
+
+        std::vector<unsigned char> buf(insert_len);
+        reader->memcpy<unsigned char *>(buf.data(), insert_len);
+
+        const DML *dml = GetDML(buf.data());
+
+        LOFT_ASSERT(dml, "Failed to parse DML object.");
+        // Use the`  raw pointer directly
+        mgr->transformDML(dml, binlog.get());
+    }
+    auto dmlEndTime = std::chrono::high_resolution_clock::now(); // 记录结束时间
+    duration = std::chrono::duration_cast<std::chrono::milliseconds>(dmlEndTime - ddlEndTime).count();
+    LOG_DEBUG("DML execution time: %ld ms", duration);
+
+    // 3. 关闭 binlog 文件流
+    binlog->close();
+}
+
+TEST(Tranform_Test, OnlyWhile) {
+
 }

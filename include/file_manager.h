@@ -1,18 +1,18 @@
-// file_manager.h
-#ifndef FILE_MANAGER_H
-#define FILE_MANAGER_H
 
-// #include "log_file.h"
-#include "binlog.h"
-#include "constants.h"
-#include "ddl_generated.h"
-#include "dml_generated.h"
-#include "table_id.h"
+#pragma once
+
 #include <cstring>
 #include <memory>
 #include <unordered_map>
 
-namespace loft {
+#include "format/ddl_generated.h"
+#include "format/dml_generated.h"
+
+#include "binlog.h"
+#include "constants.h"
+#include "utils/table_id.h"
+
+using namespace loft;
 
 class MyReader {
   public:
@@ -79,15 +79,18 @@ class MyReader {
 class LogFormatTransformManager {
   public:
     // 构造函数，初始化文件路径
+    // TODO remove
     LogFormatTransformManager(const std::string &filepath = "./data");
 
     /*
         读取 data 中的 第 nowTestCase 个 SQL 语句，[1, 10]
+        TODO remove
     */
     auto readSQLN(int nowTestCase) -> std::unique_ptr<char[]>;
 
     /*
        读文件
+       TODO remove
     */
     auto readFileAsBinary(const std::string &filePath = "./data")
         -> std::pair<std::unique_ptr<char[]>, unsigned long long>;
@@ -102,12 +105,8 @@ class LogFormatTransformManager {
 
   private:
     std::string filepath_;                   // 文件路径，默认是 ./data
-    const int intOffset_ = loft::INT_OFFSET; // 头部，前 4 个字节存长度
-
     // <table_name, table_id> 对应，在执行多条 DML 时，能确定正在 操作同一张表
     std::unordered_map<std::string, Table_id> tableName2TableId_;
 };
 
-} // namespace loft
 
-#endif // FILE_MANAGER_H

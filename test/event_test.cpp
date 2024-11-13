@@ -1,121 +1,117 @@
 //
 // Created by Coonger on 2024/10/17.
 //
-#include "binlog.h"
-#include "control_events.h"
-#include "rows_event.h"
-#include "statement_events.h"
-#include "table_id.h"
 
-#include "logging.h"
-#include "macros.h"
-
-#include <fstream>
 #include <gtest/gtest.h>
+#include <fstream>
 #include <iomanip>
+
+#include "events/control_events.h"
+#include "events/rows_event.h"
+#include "events/statement_events.h"
+
+#include "common/logging.h"
+#include "common/macros.h"
+
+#include "binlog.h"
+#include "utils/table_id.h"
 
 // 利用 自带的 Basic_ostream 写
 TEST(WRITE_BINLOG_FILE_TEST, DISABLED_WRITE_MAGIC_NUMBER) {
-    // Create a MYSQL_BIN_LOG instance
-    MYSQL_BIN_LOG binlog(new Binlog_ofile());
-
-    // Define the test parameters
     const char *test_file_name = "test_magic";
     uint64_t test_file_size = 1024;
 
-    // Step 2: Open the binlog file
-    if (!binlog.open(test_file_name, test_file_size)) {
-        std::cerr << "Failed to open binlog file." << std::endl;
-    }
+    RC ret;
+    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
+    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
 
-    std::cout << "Binlog file opened successfully." << std::endl;
+    ret = binlog->open();
+    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
+
 
     // Step 3: Verify that the magic number was written (assuming the logic
     // writes it correctly)
 
     // Step 4: Close the binlog file
-    binlog.close();
+    binlog->close();
     std::cout << "Binlog file closed successfully." << std::endl;
 }
 
 TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_FORMAT_DESCRIPTION_EVENT) {
-    MYSQL_BIN_LOG binlog(new Binlog_ofile());
     const char *test_file_name = "test_magic_fde";
     uint64_t test_file_size = 1024;
 
-    // Step 2: Open the binlog file
-    if (!binlog.open(test_file_name, test_file_size)) {
-        std::cerr << "Failed to open binlog file." << std::endl;
-    }
+    RC ret;
+    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
+    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
 
-    std::cout << "Binlog file opened successfully." << std::endl;
+    ret = binlog->open();
+    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
 
-    Format_description_event fde(4, "8.0.26");
-    binlog.write_event_to_binlog(&fde);
+    auto fde = std::make_unique<Format_description_event>(4, "8.0.26");
+    binlog->write_event_to_binlog(fde.get());
 
-    binlog.close();
+    binlog->close();
 }
 
 TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_OPEN_NEW_BINLOG) {
-    MYSQL_BIN_LOG binlog(new Binlog_ofile());
     const char *test_file_name = "test_2_default_event";
     uint64_t test_file_size = 1024;
 
-    if (!binlog.open(test_file_name, test_file_size)) {
-        std::cerr << "Failed to open binlog file." << std::endl;
-    }
+    RC ret;
+    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
+    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
 
-    std::cout << "Binlog file opened successfully." << std::endl;
+    ret = binlog->open();
+    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
 
-    Format_description_event fde(4, "8.0.26");
-    binlog.write_event_to_binlog(&fde);
+    auto fde = std::make_unique<Format_description_event>(4, "8.0.26");
 
-    std::cout << "write fde successfully." << std::endl;
     const Gtid_set *gtid_set = new Gtid_set(new Sid_map());
-    Previous_gtids_event pge(gtid_set);
-    binlog.write_event_to_binlog(&pge);
+    auto pge = std::make_unique<Previous_gtids_event>(gtid_set);
 
-    binlog.close();
+    binlog->write_event_to_binlog(fde.get());
+    std::cout << "write fde successfully." << std::endl;
+    binlog->write_event_to_binlog(pge.get());
+
+    binlog->close();
 }
 
-TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_GTID_EVENT) {
-    MYSQL_BIN_LOG binlog(new Binlog_ofile());
+TEST(CONTROL_EVENT_FORMAT_TEST, GTID_EVENT) {
     const char *test_file_name = "test_gtid";
     uint64_t test_file_size = 1024;
 
-    if (!binlog.open(test_file_name, test_file_size)) {
-        std::cerr << "Failed to open binlog file." << std::endl;
-    }
+    RC ret;
+    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
+    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
 
-    std::cout << "Binlog file opened successfully." << std::endl;
+    ret = binlog->open();
+    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
 
     long long int last_committed_arg = 30;
     long long int sequence_number_arg = 31;
     bool may_have_sbr_stmts_arg = true;
     unsigned long long int original_commit_timestamp_arg = 1722493959000068;
     unsigned long long int immediate_commit_timestamp_arg = 1722493961117679;
-    uint32_t original_server_version = 80026;
-    uint32_t imm_server_version = 80026;
-    Gtid_event ge(
-        last_committed_arg, sequence_number_arg, may_have_sbr_stmts_arg,
-        original_commit_timestamp_arg, immediate_commit_timestamp_arg,
-        original_server_version, imm_server_version
-    );
-    binlog.write_event_to_binlog(&ge);
 
-    binlog.close();
+    auto ge = std::make_unique<Gtid_event>(last_committed_arg, sequence_number_arg, may_have_sbr_stmts_arg,
+                                           original_commit_timestamp_arg, immediate_commit_timestamp_arg,
+                                           ORIGINAL_SERVER_VERSION, IMMEDIATE_SERVER_VERSION);
+    binlog->write_event_to_binlog(ge.get());
+
+    binlog->close();
 }
 
 TEST(STATEMENT_EVENT_FORMAT_TEST, DISABLED_QUERY_EVENT) {
-    MYSQL_BIN_LOG binlog(new Binlog_ofile());
     const char *test_file_name = "test_query";
     uint64_t test_file_size = 1024;
 
-    if (!binlog.open(test_file_name, test_file_size)) {
-        std::cerr << "Failed to open binlog file." << std::endl;
-    }
+    RC ret;
+    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
+    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
 
-    std::cout << "Binlog file opened successfully." << std::endl;
+    ret = binlog->open();
+    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
 
     const char *query_arg = "create table t1 (id int)";
     const char *catalog_arg = nullptr;
@@ -123,7 +119,7 @@ TEST(STATEMENT_EVENT_FORMAT_TEST, DISABLED_QUERY_EVENT) {
                                // mysql，所以会 use 'mysql'
     catalog_arg = db_arg;
     uint64_t ddl_xid_arg = 31;
-    uint32_t query_length = strlen(query_arg);
+    size_t query_length = strlen(query_arg);
     unsigned long thread_id_arg = 10000;
     unsigned long long sql_mode_arg = 0;             // 随意
     unsigned long auto_increment_increment_arg = 0;  // 随意
@@ -132,30 +128,25 @@ TEST(STATEMENT_EVENT_FORMAT_TEST, DISABLED_QUERY_EVENT) {
     unsigned long long table_map_for_update_arg = 0; // 随意
     int errcode = 0;
 
-    Query_event *qe = new Query_event(
-        query_arg, catalog_arg, db_arg, ddl_xid_arg, query_length,
-        thread_id_arg, sql_mode_arg, auto_increment_increment_arg,
-        auto_increment_offset_arg, number, table_map_for_update_arg, errcode
-    );
+    auto qe = std::make_unique<Query_event>(  query_arg, catalog_arg, db_arg, ddl_xid_arg, query_length,
+                                            thread_id_arg, sql_mode_arg, auto_increment_increment_arg,
+                                            auto_increment_offset_arg, number, table_map_for_update_arg, errcode);
 
-    binlog.write_event_to_binlog(qe);
+    binlog->write_event_to_binlog(qe.get());
 
-    LOG_INFO("this is a info log");
-    LOG_DEBUG("this is a debug log");
-
-    binlog.close();
+    binlog->close();
 }
 
 TEST(ROWS_EVENT_FORMAT_TEST, TABLE_MAP_EVENT) {
-    MYSQL_BIN_LOG binlog(new Binlog_ofile());
     const char *test_file_name = "test_table_map";
     uint64_t test_file_size = 1024;
 
-    if (!binlog.open(test_file_name, test_file_size)) {
-        std::cerr << "Failed to open binlog file." << std::endl;
-    }
+    RC ret;
+    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
+    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
 
-    std::cout << "Binlog file opened successfully." << std::endl;
+    ret = binlog->open();
+    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
 
     // 1. 查询 table_name 是否访问过， 如果没有， 就创建一个 Table_id 对象，插入
     // mgr 的uamp
@@ -171,57 +162,28 @@ TEST(ROWS_EVENT_FORMAT_TEST, TABLE_MAP_EVENT) {
     //
     //    binlog.write_event_to_binlog(&tme);
 
-    binlog.close();
+    binlog->close();
 }
 
 TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_ROTATE_EVENT) {
-    MYSQL_BIN_LOG binlog(new Binlog_ofile());
     const char *test_file_name = "test_rotate";
     uint64_t test_file_size = 1024;
 
-    if (!binlog.open(test_file_name, test_file_size)) {
-        std::cerr << "Failed to open binlog file." << std::endl;
-    }
+    RC ret;
+    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
+    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
 
-    std::cout << "Binlog file opened successfully." << std::endl;
+    ret = binlog->open();
+    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
 
 
     std::string next_binlog_file_name = "ON.000021";
-    Rotate_event* rotateEvent = new Rotate_event(next_binlog_file_name.c_str(), next_binlog_file_name.length(),
-                                                Rotate_event::DUP_NAME, 4);
-    binlog.write_event_to_binlog(rotateEvent);
+    LOG_INFO("next binlog file_name len: %zu", next_binlog_file_name.length());
 
-    binlog.close();
+    auto re = std::make_unique<Rotate_event>(next_binlog_file_name.c_str(), next_binlog_file_name.length(),
+                                             Rotate_event::DUP_NAME, 4);
+    binlog->write_event_to_binlog(re.get());
 
+    binlog->close();
 }
 
-
-TEST(EVENT_FORMAT_TEST, DISABLED_PRINT_BINARY_FILE_TO_HEX) {
-    std::string filename = "test_magic_fde";
-    std::ifstream file(filename, std::ios::binary);
-    if (!file) {
-        std::cerr << "无法打开文件: " << filename << std::endl;
-        return;
-    }
-
-    unsigned char buffer[16];
-    int bytesRead;
-    int lineCount = 0;
-
-    while ((bytesRead =
-                file.read(reinterpret_cast<char *>(buffer), sizeof(buffer))
-                    .gcount())
-           > 0) {
-        std::cout << std::hex << std::setfill('0') << std::setw(4)
-                  << lineCount * 16 << ": ";
-
-        for (int i = 0; i < bytesRead; ++i) {
-            std::cout << std::setw(2) << static_cast<int>(buffer[i]) << ' ';
-        }
-
-        std::cout << std::endl;
-        ++lineCount;
-    }
-
-    file.close();
-}

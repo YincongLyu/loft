@@ -33,7 +33,7 @@ RC MYSQL_BIN_LOG::open() {
     // Step 2: 如果打开的是一个空文件，就会先写一个 magic number 和 一个 fde
     if (m_binlog_file_->is_empty()) {
         bool w_ok = m_binlog_file_->write(
-            reinterpret_cast<const loft::uchar *>(BINLOG_MAGIC),
+            reinterpret_cast<const uchar *>(BINLOG_MAGIC),
             BIN_LOG_HEADER_SIZE
         );
 
@@ -66,7 +66,7 @@ bool MYSQL_BIN_LOG::write_event_to_binlog(AbstractEvent *ev) {
 }
 
 void MYSQL_BIN_LOG::update_binlog_end_pos(
-    const char *file, loft::my_off_t pos
+    const char *file, my_off_t pos
 ) {
     // TODO
     return;

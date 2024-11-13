@@ -1,11 +1,11 @@
 //
 // Created by Coonger on 2024/10/28.
 //
-#include "mysql_fields.h"
-#include "little_endian.h"
+#include "sql/mysql_fields.h"
+#include "utils/little_endian.h"
 #include <memory>
 
-#include "logging.h"
+#include "common/logging.h"
 
 namespace mysql {
 
@@ -49,7 +49,7 @@ inline int my_decimal_get_binary_size(uint precision, uint scale) {
 
 /// This is used as a table name when the table structure is not set up
 Field::Field(
-    uint32_t length_arg,
+    uint32 length_arg,
     bool is_nullable_arg,
     unsigned char null_bit_arg,
     const char *field_name_arg

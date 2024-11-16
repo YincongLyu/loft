@@ -11,7 +11,6 @@
 
 #include "basic_ostream.h"
 
-
 enum Log_event_type
 {
   /**
@@ -119,26 +118,28 @@ class AbstractEvent;
 class EventCommonHeader
 {
 public:
-  EventCommonHeader(uint64 immediate_commit_timestamp_arg = 0, Log_event_type type_code_arg = ENUM_END_EVENT)
-      : type_code_(type_code_arg), timestamp_(immediate_commit_timestamp_arg),
+  EventCommonHeader(time_t i_ts_arg, Log_event_type type_code_arg = ENUM_END_EVENT)
+      : type_code_(type_code_arg),
+        timestamp_(i_ts_arg),
         data_written_(0)  // 暂时不用填入，等到 write common-header时 外界会计算出 event_data_len
         ,
         log_pos_(0),
-        flags_(0) // 默认正常关闭
+        flags_(0)  // 默认正常关闭
   {
-//    when_.tv_sec  = 0;
-//    when_.tv_usec = 0;
+    //    when_.tv_sec  = 0;
+    //    when_.tv_sec  = static_cast<long>(i_ts_arg / 1000000);
+    //    when_.tv_usec = 0;
   }
   ~EventCommonHeader() = default;
 
 public:
-//  struct timeval     when_{};
-  uint64 timestamp_;
+  //  struct timeval     when_{};
+  time_t             timestamp_;
   Log_event_type     type_code_;
-  uint32           unmasked_server_id_;
+  uint32             unmasked_server_id_;
   size_t             data_written_;
   unsigned long long log_pos_;
-  uint16           flags_;
+  uint16             flags_;
 };
 
 class EventCommonFooter
@@ -218,25 +219,20 @@ public:
    */
   virtual bool write_data_body(Basic_ostream *) { return true; }
 
-  bool     write_common_header(Basic_ostream *ostream, size_t event_data_length);
-  bool     write_common_footer(Basic_ostream *ostream);
+  bool write_common_header(Basic_ostream *ostream, size_t event_data_length);
+  bool write_common_footer(Basic_ostream *ostream);
 
-  //    virtual bool write(Basic_ostream *ostream) = 0;
+  virtual bool write(Basic_ostream *ostream)
+  {
+    return write_common_header(ostream, get_data_size()) && write_data_header(ostream) && write_data_body(ostream);
+  }
 
-//  virtual bool write(Basic_ostream *ostream)
-//  {
-//    return write_common_header(ostream, get_data_size()) && write_data_header(ostream) && write_data_body(ostream);
-//  }
-    virtual bool write(Basic_ostream *ostream)
-    {
-      return true;
-    }
+  time_t get_common_header_time();
 
-//  LEX_CSTRING get_invoker_user() { return {USER, strlen(USER)}; }
+  //  LEX_CSTRING get_invoker_user() { return {USER, strlen(USER)}; }
 
-//  LEX_CSTRING get_invoker_host() { return {HOST, strlen(HOST)}; }
+  //  LEX_CSTRING get_invoker_host() { return {HOST, strlen(HOST)}; }
 private:
-  uint64 get_common_header_time();
   uint32 write_common_header_to_memory(uchar *buf);
 
 public:

@@ -44,7 +44,7 @@ public:
   /*
     delete,update
   */
-  void set_null_before(std::vector<bool> t)
+  void set_null_before(std::vector<bool> &&t)
   {
     assert(t.size() == rows_before.size());
     null_before = t;
@@ -53,7 +53,7 @@ public:
   /*
     insert,update
   */
-  void set_null_after(std::vector<bool> t)
+  void set_null_after(std::vector<bool> &&t)
   {
     assert(t.size() == rows_after.size());
     null_after = t;
@@ -62,7 +62,7 @@ public:
   /*
     insert,update
   */
-  void set_rows_after(std::vector<int> rows)
+  void set_rows_after(std::vector<int> &&rows)
   {
     assert(rows.size() <= m_width);
     this->rows_after = rows;
@@ -71,7 +71,7 @@ public:
   /*
     delete,update
   */
-  void set_rows_before(std::vector<int> rows)
+  void set_rows_before(std::vector<int> &&rows)
   {
     assert(rows.size() <= m_width);
     this->rows_before = rows;

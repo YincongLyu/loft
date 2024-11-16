@@ -159,37 +159,44 @@ inline enum_field_types LogFormatTransformManager::ConvertStringType(std::string
   }
 }
 
-void LogFormatTransformManager::processRowData(const ::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>> &fields,
+void LogFormatTransformManager::processRowData(const ::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>> &data,
     Rows_event *row, const std::unordered_map<std::string, int> &field_map,
     const std::vector<mysql::FieldRef> &field_vec, bool is_before)
 {
   row->setBefore(is_before);
 
   // 预分配容量，避免动态扩容
+  int changeDataSize = data.size();
   std::vector<int> rows;
   std::vector<bool> rows_null;
-  rows.reserve(fields.size());
-  rows_null.reserve(fields.size());
+  rows.reserve(changeDataSize);
+  rows_null.reserve(changeDataSize);
+
+  std::vector<int> data_indices(changeDataSize); // 存储索引
 
   // 第一次遍历：处理null标记
-  for (auto item : fields) {
+  for (int i = 0; i < changeDataSize; ++i) {
+    auto item = data[i];
     int field_idx = field_map.at(item->key()->c_str());
+    data_indices[i] = field_idx; // 存储索引
+
     rows.push_back(field_idx);
     rows_null.push_back(item->value_type() == DataMeta_NONE);
   }
 
   if (is_before) {
-    row->set_rows_before(rows);
-    row->set_null_before(rows_null);
+    row->set_rows_before(std::move(rows));
+    row->set_null_before(std::move(rows_null));
   } else {
-    row->set_rows_after(rows);
-    row->set_null_after(rows_null);
+    row->set_rows_after(std::move(rows));
+    row->set_null_after(std::move(rows_null));
   }
 
-  // 第二次遍历：直接处理非NONE的数据
-  for (auto item : fields) {
+  // 第二次遍历：直接处理非NONE的数据, 减少一次 umap 的哈希查找
+  for (int i = 0; i < changeDataSize; ++i) {
+    auto item = data[i];
     if (item->value_type() != DataMeta_NONE) {
-      int field_idx = field_map.at(item->key()->c_str());
+      int field_idx = data_indices[i]; // 使用存储的索引
       if (auto handler = DataHandlerFactory::getHandler(item->value_type())) {
         handler->processData(item, field_vec[field_idx - 1].get(), row);
       }

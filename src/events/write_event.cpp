@@ -4,8 +4,16 @@ Rows_event::Rows_event(
     const Table_id &tid, unsigned long wid, uint16 flag, Log_event_type type, uint64 immediate_commit_timestamp_arg)
     : m_table_id(tid), m_type(type), AbstractEvent(type)
 {
-  data_size1 = 0;
-  data_size2 = 0;
+  // 构造函数中预分配内存，按照 30 columns 来算 * 8 byte， string类型会经常扩容
+  const size_t INITIAL_SIZE = 64;
+  m_rows_before_buf = std::make_unique<uchar[]>(INITIAL_SIZE);
+  m_rows_after_buf = std::make_unique<uchar[]>(INITIAL_SIZE);
+  m_before_capacity = INITIAL_SIZE;
+  m_after_capacity = INITIAL_SIZE;
+  before_data_size_used = 0;
+  after_data_size_used = 0;
+//  data_size1 = 0;
+//  data_size2 = 0;
   this->Set_width(wid);
   this->Set_flags(flag);
   cols_init();
@@ -13,7 +21,6 @@ Rows_event::Rows_event(
 
   time_t i_ts          = static_cast<time_t>(immediate_commit_timestamp_arg / 1000000);
   this->common_header_ = std::make_unique<EventCommonHeader>(i_ts);
-  //  this->common_header_ = std::make_unique<EventCommonHeader>(immediate_commit_timestamp_arg);
   //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
@@ -100,7 +107,7 @@ bool Rows_event::write_data_body(Basic_ostream *ostream)
     }
     std::reverse(row_bitmap_before.get(), row_bitmap_before.get() + N);
     res &= ostream->write(row_bitmap_before.get(), N);
-    res &= ostream->write(m_rows_before_buf.get(), data_size1);
+    res &= ostream->write(m_rows_before_buf.get(), before_data_size_used);
   }
 
   if (m_type == Log_event_type::UPDATE_ROWS_EVENT || m_type == Log_event_type::WRITE_ROWS_EVENT) {
@@ -113,7 +120,7 @@ bool Rows_event::write_data_body(Basic_ostream *ostream)
     }
     std::reverse(row_bitmap_after.get(), row_bitmap_after.get() + N);
     res &= ostream->write(row_bitmap_after.get(), N);
-    res &= ostream->write(m_rows_after_buf.get(), data_size2);
+    res &= ostream->write(m_rows_after_buf.get(), after_data_size_used);
   }
   return res;
 }
@@ -123,13 +130,22 @@ bool Rows_event::write(Basic_ostream *ostream)
   return write_common_header(ostream, get_data_size()) && write_data_header(ostream) && write_data_body(ostream);
 }
 
-void Rows_event::buf_resize(std::unique_ptr<uchar[]> &buf, size_t size1, size_t size2)
-{
-  auto new_buf = std::make_unique<uchar[]>(size2);
-  if (size1 > 0 && buf) {
-    memcpy(new_buf.get(), buf.get(), size1);
+void Rows_event::buf_resize(std::unique_ptr<uchar[]>& buf, size_t& capacity, size_t current_size, size_t needed_size) {
+  if (needed_size <= capacity) {
+    return;  // 如果现有容量足够，直接返回
   }
+
+  // 计算新容量：至少是needed_size，并且是当前容量的2倍
+  size_t new_capacity = std::max(needed_size, capacity * 2);
+  auto new_buf = std::make_unique<uchar[]>(new_capacity);
+
+  // 拷贝现有数据
+  if (current_size > 0 && buf) {
+    memcpy(new_buf.get(), buf.get(), current_size);
+  }
+
   buf = std::move(new_buf);
+  capacity = new_capacity;
 }
 
 void Rows_event::double2demi(double num, decimal_t &t, int precision, int frac)
@@ -173,8 +189,8 @@ size_t Rows_event::calculate_event_size()
   uchar        sbuf[sizeof(m_width) + 1];
   uchar *const sbuf_end = net_store_length(sbuf, (size_t)m_width);
   event_size += ROWS_HEADER_LEN_V2;
-  event_size += data_size1;
-  event_size += data_size2;
+  event_size += before_data_size_used;
+  event_size += after_data_size_used;
   event_size += (sbuf_end - sbuf);
   if (m_type == Log_event_type::WRITE_ROWS_EVENT) {
     event_size += n;

@@ -25,49 +25,51 @@
 #include <iostream>
 #include <map>
 
-using pib = std::pair<int, bool>;
+inline uint64_t LogFormatTransformManager::stringToTimestamp(const std::string& timeString) {
+  std::tm timeStruct = {};
 
-// ss >> std::get_time(&timeStruct, "%Y-%m-%d %H:%M:%S.%f");
-// get_time 不支持 解析微妙，只能到 秒级精度，故 拆开成两部分
-// - std::mktime：默认会将时间解析为本地时间，这样会导致时区偏移问题
-// - timegm：这个函数会将时间解释为 UTC
-static inline uint64 _stringToTimestamp(const std::string &timeString)
-{
-  std::tm     timeStruct = {};
-  std::string datetimePart, microsecondPart;
+  // 直接使用指针操作，避免字符串拷贝
+  const char* str = timeString.c_str();
+  const char* p = str;
 
-  // 分离日期和微秒部分
-  size_t dotPos = timeString.find('.');
-  if (dotPos != std::string::npos) {
-    datetimePart    = timeString.substr(0, dotPos);
-    microsecondPart = timeString.substr(dotPos + 1);
-  } else {
-    datetimePart    = timeString;
-    microsecondPart = "0";
+  // 直接解析年月日时分秒，避免使用istringstream
+  timeStruct.tm_year = (p[0] - '0') * 1000 + (p[1] - '0') * 100 +
+                       (p[2] - '0') * 10 + (p[3] - '0') - 1900;
+  timeStruct.tm_mon = (p[5] - '0') * 10 + (p[6] - '0') - 1;
+  timeStruct.tm_mday = (p[8] - '0') * 10 + (p[9] - '0');
+  timeStruct.tm_hour = (p[11] - '0') * 10 + (p[12] - '0');
+  timeStruct.tm_min = (p[14] - '0') * 10 + (p[15] - '0');
+  timeStruct.tm_sec = (p[17] - '0') * 10 + (p[18] - '0');
+
+  // 检查格式是否正确
+  if (p[4] != '-' || p[7] != '-' || p[10] != ' ' ||
+      p[13] != ':' || p[16] != ':') {
+    throw std::runtime_error("Invalid time format");
   }
 
-  // 解析日期时间部分
-  std::istringstream ss(datetimePart);
-  ss >> std::get_time(&timeStruct, "%Y-%m-%d %H:%M:%S");
-
-  if (ss.fail()) {
-    throw std::runtime_error("Failed to parse time string");
+  // 解析微秒部分
+  int microseconds = 0;
+  if (timeString.length() > 19 && p[19] == '.') {
+    p += 20;  // 移到小数点后第一位
+    int multiplier = 100000;  // 从最高位开始
+    while (*p >= '0' && *p <= '9' && multiplier > 0) {
+      microseconds += (*p - '0') * multiplier;
+      multiplier /= 10;
+      ++p;
+    }
   }
 
-  // 使用 timegm 将 tm 转换为 UTC 时间戳
-  time_t timeEpoch      = timegm(&timeStruct);
-  auto   timeSinceEpoch = std::chrono::system_clock::from_time_t(timeEpoch);
+  time_t timeEpoch = timegm(&timeStruct);
+  auto timeSinceEpoch = std::chrono::system_clock::from_time_t(timeEpoch);
 
-  // 减去 8 小时的偏移
+  // 减去8小时偏移
   timeSinceEpoch -= std::chrono::hours(8);
 
-  // 转换微秒部分
-  int  microseconds              = std::stoi(microsecondPart);
-  auto additionalMicroseconds    = std::chrono::microseconds(microseconds);
-  auto timePointWithMicroseconds = timeSinceEpoch + additionalMicroseconds;
+  // 添加微秒
+  auto timePointWithMicroseconds = timeSinceEpoch + std::chrono::microseconds(microseconds);
 
-  // 转换为自 epoch 起的微秒数
-  return std::chrono::duration_cast<std::chrono::microseconds>(timePointWithMicroseconds.time_since_epoch()).count();
+  return std::chrono::duration_cast<std::chrono::microseconds>(
+      timePointWithMicroseconds.time_since_epoch()).count();
 }
 
 void LogFormatTransformManager::transformDDL(const DDL *ddl, MYSQL_BIN_LOG *binLog)
@@ -85,8 +87,8 @@ void LogFormatTransformManager::transformDDL(const DDL *ddl, MYSQL_BIN_LOG *binL
   auto lastCommit = ddl->last_commit();
   auto txSeq      = ddl->tx_seq();
 
-  auto i_ts = _stringToTimestamp(immediateCommitTs->c_str());
-  auto o_ts = _stringToTimestamp(originalCommitTs->c_str());
+  auto i_ts = stringToTimestamp(immediateCommitTs->c_str());
+  auto o_ts = stringToTimestamp(originalCommitTs->c_str());
 
   auto gtidEvent = std::make_unique<Gtid_event>(
       lastCommit, txSeq, true, o_ts, i_ts, ORIGINAL_SERVER_VERSION, IMMEDIATE_SERVER_VERSION);
@@ -163,24 +165,17 @@ void LogFormatTransformManager::processRowData(const ::flatbuffers::Vector<::fla
 {
   row->setBefore(is_before);
 
-  std::map<int, bool>           rows_pair;
-  std::map<int, const kvPair *> dataMap;  // 存不为 null 的 kvPair
-
-  // 收集字段信息
-  for (auto item : fields) {
-    int field_idx        = field_map.at(item->key()->c_str());
-    rows_pair[field_idx] = (item->value_type() == DataMeta_NONE);
-    if (item->value_type() != DataMeta_NONE) {
-      dataMap[field_idx] = item;
-    }
-  }
-
-  // 设置null标记
-  std::vector<int>  rows;
+  // 预分配容量，避免动态扩容
+  std::vector<int> rows;
   std::vector<bool> rows_null;
-  for (const auto &[idx, flag] : rows_pair) {
-    rows.push_back(idx);
-    rows_null.push_back(flag);
+  rows.reserve(fields.size());
+  rows_null.reserve(fields.size());
+
+  // 第一次遍历：处理null标记
+  for (auto item : fields) {
+    int field_idx = field_map.at(item->key()->c_str());
+    rows.push_back(field_idx);
+    rows_null.push_back(item->value_type() == DataMeta_NONE);
   }
 
   if (is_before) {
@@ -191,10 +186,13 @@ void LogFormatTransformManager::processRowData(const ::flatbuffers::Vector<::fla
     row->set_null_after(rows_null);
   }
 
-  // 处理数据
-  for (const auto &[idx, kv] : dataMap) {
-    if (auto handler = DataHandlerFactory::getHandler(kv->value_type())) {
-      handler->processData(kv, field_vec[idx - 1].get(), row);
+  // 第二次遍历：直接处理非NONE的数据
+  for (auto item : fields) {
+    if (item->value_type() != DataMeta_NONE) {
+      int field_idx = field_map.at(item->key()->c_str());
+      if (auto handler = DataHandlerFactory::getHandler(item->value_type())) {
+        handler->processData(item, field_vec[field_idx - 1].get(), row);
+      }
     }
   }
 }
@@ -207,8 +205,8 @@ void LogFormatTransformManager::transformDML(const DML *dml, MYSQL_BIN_LOG *binL
   auto txSeq             = dml->tx_seq();
   auto immediateCommitTs = dml->msg_time();
   auto originalCommitTs  = dml->tx_time();
-  auto i_ts              = _stringToTimestamp(immediateCommitTs->c_str());
-  auto o_ts              = _stringToTimestamp(originalCommitTs->c_str());
+  auto i_ts              = stringToTimestamp(immediateCommitTs->c_str());
+  auto o_ts              = stringToTimestamp(originalCommitTs->c_str());
 
   auto ge = std::make_unique<Gtid_event>(
       lastCommit, txSeq, true, o_ts, i_ts, ORIGINAL_SERVER_VERSION, IMMEDIATE_SERVER_VERSION);

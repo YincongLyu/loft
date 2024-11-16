@@ -27,6 +27,7 @@ public:
   void transformDML(const DML *dml, MYSQL_BIN_LOG *binLog);
 
 private:
+  inline uint64_t stringToTimestamp(const std::string& timeString);
   inline enum_field_types ConvertStringType(std::string_view type_str);
   void processRowData(const ::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>> &fields, Rows_event *row,
       const std::unordered_map<std::string, int> &field_map, const std::vector<mysql::FieldRef> &field_vec,

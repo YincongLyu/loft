@@ -10,82 +10,13 @@
 #include <utility>       // std::pair
 #include <map>           // std::map
 
-#include "file_manager.h"
+#include "transform_manager.h"
 #include "binlog.h"
 #include "events/abstract_event.h"
 #include "common/init_setting.h"
 #include "common/rc.h"
 
 namespace loft {
-
-class BufferReader
-{
-public:
-  BufferReader(const char *buffer, unsigned long long length) : buffer_(buffer), ptr_(buffer), limit_(length) {}
-  ~BufferReader() = default;
-
-  /**
-   * @brief 一次性读取 sizeof(T) 个 char byte，并将指针向前移动，读取已做小端处理
-   * @tparam T
-   * @param bytes
-   * @return 解释成 T 类型的 value
-   */
-  template <typename T>
-  T read(unsigned char bytes = sizeof(T))
-  {
-    if (ptr_ + bytes > buffer_ + limit_) {
-      throw std::out_of_range("Attempt to read beyond buffer limit");
-    }
-    T value = 0;
-    ::memcpy((char *)&value, ptr_, bytes);
-    ptr_ = ptr_ + bytes;
-    return (bytes > 1) ? letoh(value) : value;
-  }
-
-  template <typename T>
-  void memcpy(T destination, size_t length)
-  {
-    if (ptr_ + length > buffer_ + limit_) {
-      throw std::out_of_range("Attempt to copy beyond buffer limit");
-    }
-    ::memcpy(destination, ptr_, length);
-    ptr_ = ptr_ + length;
-  }
-
-  void forward(size_t length)
-  {
-    if (ptr_ + length > buffer_ + limit_) {
-      throw std::out_of_range("Attempt to forward beyond buffer limit");
-    }
-    ptr_ = ptr_ + length;
-  }
-
-  unsigned long long position() { return ptr_ >= buffer_ ? ptr_ - buffer_ : limit_; }
-
-  bool valid() { return ptr_ < buffer_ + limit_; }
-
-private:
-  template <typename T>
-  T letoh(T value)
-  {
-    if constexpr (std::is_same_v<T, uint16_t>) {
-      return le16toh(value);
-    } else if constexpr (std::is_same_v<T, int32_t>) {
-      return le32toh(value);
-    } else if constexpr (std::is_same_v<T, uint32_t>) {
-      return le32toh(value);
-    } else if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
-      return le64toh(value);
-    } else {
-      throw std::invalid_argument("Unsupported type for letoh");
-    }
-  }
-
-private:
-  const char        *buffer_;
-  const char        *ptr_;
-  unsigned long long limit_;
-};
 
 /**
  * @brief 负责处理一个日志文件，包括读取和写入
@@ -94,7 +25,9 @@ class RedoLogFileReader
 {
 public:
   RedoLogFileReader()  = default;
-  ~RedoLogFileReader() = default;
+  ~RedoLogFileReader() {
+    close();
+  }
 
   auto open(const char *filename) -> RC;
   auto close() -> RC;
@@ -107,7 +40,6 @@ private:
 
 /**
  * @brief 负责写入一个日志文件， 【封装 我写的 MYSQL_BIN_LOG 类】
- * @ingroup CLog
  */
 class BinLogFileWriter
 {
@@ -155,7 +87,7 @@ class LogFileManager
 {
 public:
   LogFileManager();
-  ~LogFileManager() = default;
+  ~LogFileManager();
 
   // TODO 此处 实现 3 个 必要接口
 
@@ -171,17 +103,17 @@ public:
 
   /// 接口二：
   RC transform(const char *file_name, bool is_ddl);
+  RC transform(std::vector<unsigned char> &&buf, bool is_ddl);
 
   /// 接口三：
   /**
    * @brief 从文件名称的后缀中获取这是第几个 binlog 文件，先去除前导0
    * @details 如果日志文件名不符合要求，就返回失败。实际上返回 3 个
-   * scn、seq、ckp 字段，只用保存 ckp， 我需要在每个 LogWriter
-   * 中再保存处理的最后一条sql
+   * scn、seq、ckp 字段，只用保存 ckp，在调用 next_file() 时，就可以得到，当前的 ckp
    */
-  RC get_last_status_from_filename(const std::string &filename, uint64_t &scn, uint32_t &seq, const std::string &ckp);
+  RC get_last_status_from_filename(const std::string &filename, uint64 &scn, uint32 &seq, std::string &ckp);
 
-  RC get_fileno_from_filename(const std::string &filename, uint32_t &fileno);
+  RC get_fileno_from_filename(const std::string &filename, uint32 &fileno);
 
   /**
    * @brief 获取最新的一个日志文件名
@@ -197,7 +129,13 @@ public:
    */
   RC next_file(BinLogFileWriter &file_writer);
 
-  auto get_log_files() -> std::map<uint32_t, std::filesystem::path> & { return log_files_; }
+  RC write_filename2index(std::string &filename);
+
+  auto get_directory() -> const char * { return directory_.c_str(); }
+  auto get_file_prefix() -> const char * { return file_prefix_; }
+  auto get_file_max_size() -> size_t { return max_file_size_per_file_; }
+
+  auto get_log_files() -> std::map<uint32, std::filesystem::path> & { return log_files_; }
   auto get_file_reader() -> RedoLogFileReader * { return file_reader_.get(); }
   auto get_file_writer() -> BinLogFileWriter * { return file_writer_.get(); }
   auto get_transform_manager() -> LogFormatTransformManager * { return transform_manager_.get(); }
@@ -207,10 +145,15 @@ private:
   const char *file_dot_    = ".";
   std::string file_suffix_;  // 这会是一个递增的后缀数字
 
+  std::string index_suffix_ = ".index";
+  int index_fd_ = -1; // init()后，就打开 index 文件
+
   std::filesystem::path directory_              = DEFAULT_BINLOG_FILE_DIR;   /// 日志文件存放的目录
   size_t                max_file_size_per_file_ = DEFAULT_BINLOG_FILE_SIZE;  /// 一个文件的最大字节数
 
-  std::map<uint32_t, std::filesystem::path> log_files_;  /// file_no 和 日志文件名 的映射
+  std::map<uint32, std::filesystem::path> log_files_;  /// file_no 和 日志文件名 的映射
+  std::unordered_map<uint32, std::string> file_ckp_; /// file_no 和 ckp 的映射
+  uint32 last_file_no_;
 
   std::unique_ptr<RedoLogFileReader>         file_reader_;
   std::unique_ptr<BinLogFileWriter>          file_writer_;

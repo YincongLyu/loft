@@ -5,10 +5,10 @@
 #include <fcntl.h>   // ::open
 #include <charconv>  // std::from_chars
 #include <string_view>  // std::string_view
+#include <cstring> // std::strcmp
 
 #include "log_file.h"
-//#include "common/io/io.h"
-
+#include "buffer_reader.h"
 
 auto RedoLogFileReader::open(const char *filename) -> RC {
     filename_ = filename;
@@ -40,7 +40,7 @@ auto RedoLogFileReader::readFromFile(const std::string &fileName)
         return {nullptr, 0};  // 返回空指针和大小为0
     }
 
-    const size_t bufferSize = 4096;  // 每次读取4KB数据
+    const size_t bufferSize = IO_SIZE;  // 每次读取4KB数据
     char buffer[bufferSize];
     size_t readSize = 0;
     size_t oneRead = 0;
@@ -91,7 +91,7 @@ RC BinLogFileWriter::open(const char *filename, size_t max_file_size)
     // 这里仅是 初始化了文件信息，还没有 open 文件流
     RC ret;
     bin_log_ = std::make_unique<MYSQL_BIN_LOG>(filename, max_file_size, ret);
-    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
+    LOFT_VERIFY(ret != RC::SUCCESS, "Failed to create binlog file.");
     // 直接返回 当前文件的 可写位置，相当于继续写
     return bin_log_->open(); // 正确返回 RC::SUCCESS
 }
@@ -108,6 +108,7 @@ RC BinLogFileWriter::close()
     return bin_log_->close(); // 正确返回  RC::SUCCESS;
 }
 
+RC BinLogFileWriter::write(AbstractEvent &event) { return bin_log_->write_event_to_binlog(&event) ? RC::SUCCESS : RC::IOERR_EVENT_WRITE; }
 
 ///////////////////////////////////////////////////
 
@@ -155,6 +156,16 @@ RC LogFileManager::init(const char *directory, const char *file_name_prefix, uin
 
     LOG_INFO("init log file manager success. directory=%s, log files=%d",
              directory_.c_str(), static_cast<int>(log_files_.size()));
+
+
+    // 获得索引文件 句柄
+    std::filesystem::path index_path = directory_ / (file_prefix_ + index_suffix_);
+    index_fd_ = ::open(index_path.c_str(), O_RDWR | O_CREAT | O_APPEND, 0644);
+    if (index_fd_ < 0) {
+      LOG_ERROR("open file failed. filename=%s, error=%s", index_path.c_str(), strerror(errno));
+      return RC::FILE_OPEN;
+    }
+
     return RC::SUCCESS;
 }
 
@@ -221,13 +232,34 @@ RC LogFileManager::transform(const char *filename, bool is_ddl) {
             const DML *dml = GetDML(buf.data());
             transform_manager_->transformDML(dml, file_writer_->get_binlog());
             dml_count++;
-            if (dml_count % 500 == 0)
-                LOG_DEBUG("%lu", file_writer_->get_binlog()->get_bytes_written());
+//            if (dml_count % 500 == 0)
+//                LOG_DEBUG("%lu", file_writer_->get_binlog()->get_bytes_written());
         }
-        LOG_DEBUG("done, dml count=%d", dml_count);
+//        LOG_DEBUG("done, dml count=%d", dml_count);
     }
 
     return RC::SUCCESS;
+}
+
+RC LogFileManager::transform(std::vector<unsigned char> &&buf, bool is_ddl) {
+
+  if (!file_writer_->get_binlog()->remain_bytes_safe()) {
+    this->next_file(*file_writer_.get());
+  }
+
+  if (is_ddl) {
+    const DDL *ddl = GetDDL(buf.data());
+
+    file_ckp_[last_file_no_] = ddl->check_point()->c_str();
+
+    transform_manager_->transformDDL(ddl, file_writer_->get_binlog());
+  } else {
+    const DML *dml = GetDML(buf.data());
+    file_ckp_[last_file_no_] = dml->check_point()->c_str();
+    transform_manager_->transformDML(dml, file_writer_->get_binlog());
+  }
+
+  return RC::SUCCESS;
 }
 
 LogFileManager::LogFileManager()
@@ -249,10 +281,11 @@ RC LogFileManager::last_file(BinLogFileWriter &file_writer) {
 }
 
 RC LogFileManager::next_file(BinLogFileWriter &file_writer) {
-    // TODO 当调用 next_file 时，要在 last_file 的末尾 写入一个 rotate event
 
     // 最小从 1 开始
     uint32_t fileno = log_files_.empty() ? 1 : log_files_.rbegin()->first + 1;
+
+    last_file_no_ = fileno;
 
     std::ostringstream oss;
     oss << std::setw(6) << std::setfill('0') << fileno;
@@ -266,14 +299,77 @@ RC LogFileManager::next_file(BinLogFileWriter &file_writer) {
         // 在上一个文件中，写入一个 rotate event 再关闭
         auto rotateEvent = std::make_unique<Rotate_event>(nowFilename, nowFilename.length(),
                                                           Rotate_event::DUP_NAME, 4);
+        assert(rotateEvent != nullptr);
         file_writer.get_binlog()->write_event_to_binlog(rotateEvent.get());
 
         file_writer.close();
     }
 
     log_files_.emplace(fileno, next_file_path);
+    // 写入索引文件
+    write_filename2index(nextFilename);
 
     LOG_DEBUG("[==rotate file==]next file name = %s", next_file_path.c_str());
 
     return file_writer.open(next_file_path.c_str(), max_file_size_per_file_);
+}
+
+LogFileManager::~LogFileManager() {
+  // 关闭 index_fd_
+  if (index_fd_ >= 0) {
+    ::close(index_fd_);
+    index_fd_ = -1;
+  }
+}
+
+RC LogFileManager::write_filename2index(std::string &filename) {
+
+  filename += "\n";  // 添加换行符
+  ssize_t write_len = write(index_fd_, filename.c_str(), filename.length());
+  if (write_len != static_cast<ssize_t>(filename.length())) {
+    LOG_ERROR("Failed to write to index file, expected %zu bytes, wrote %zd bytes, error: %s",
+                 filename.length(), write_len, strerror(errno));
+    return RC::IOERR_WRITE;
+  }
+
+  return RC::SUCCESS;
+}
+
+RC LogFileManager::get_last_status_from_filename(
+    const std::string &filename, uint64 &scn, uint32 &seq, std::string &ckp)
+{
+
+  // 找到. 符号的位置
+  std::string numberString;
+  size_t dotPos = filename.find('.');
+  if (dotPos != std::string::npos && filename.substr(0, dotPos) == DEFAULT_BINLOG_FILE_NAME_PREFIX ) {
+    numberString = filename.substr(dotPos + 1);
+  } else {
+    LOG_ERROR("binlog file name format error");
+    return RC::FILE_NOT_EXIST;
+  }
+  // 将数字字符串转换为整数
+  uint32 file_no = static_cast<uint32_t>(std::strtoul(numberString.c_str(), nullptr, 10));
+
+  // 处理 ckp，返回查询值
+  ckp = file_ckp_[file_no];
+  std::string input = ckp;
+
+  std::string delimiter = "-";
+  size_t pos = 0;
+  std::string token;
+  int count = 0;
+  uint64 numbers[2]; // 用于存储提取的数字
+
+  while ((pos = input.find(delimiter)) != std::string::npos) {
+    token = input.substr(0, pos);
+    numbers[count] = std::stoi(token); // 将字符串转换为整数
+    input.erase(0, pos + delimiter.length());
+    count++;
+    if (count == 2) break; // 已经提取了 scn 和 seq
+  }
+
+  scn = numbers[0];
+  seq = static_cast<uint32>(numbers[1]);
+  return RC::SUCCESS;
 }

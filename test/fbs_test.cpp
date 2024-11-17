@@ -8,519 +8,607 @@
 #include "common/macros.h"
 
 #include "binlog.h"
-#include "file_manager.h"
-
+#include "transform_manager.h"
+#include "buffer_reader.h"
+#include "log_file.h"
+#include "utils/base64.h"
 
 using namespace loft; // flatbuffer namespace
 
-//TEST(DDL_TEST, DISABLED_CREATE_TABLE) {
-//    LogFormatTransformManager mgr;
-//    // 读二进制
-//    auto create_db_sql = mgr.readSQLN(1);
-//
-//    // 获取指向vector数据的指针
-//    const char *buf = create_db_sql.get();
-//
-//    // 使用GetDDL函数获取DDL对象
-//    const DDL *ddl = GetDDL(buf);
-//
-//    if (ddl) {
-//        // 使用 check_point() 方法获取 flatbuffers::String*
-//        auto checkpoint = ddl->check_point();
-//        std::cout << checkpoint->c_str() << '\n';
-//    } else {
-//        // 处理错误情况
-//    }
-//}
+/**
+ * @brief 1. 测试 RedoLogFileReader 的 readFromFile 方法 & BufferReader 的 read 方法
+ *        2. 验证读 DDL sql，create db 字段格式能否正确解析, 缺少 dbName 和 table 字段，共 11 个字段
+ */
+TEST(DDL_TEST, CREATE_DB) {
+  std::string file_name = "/home/yincong/loft/testDataDir/data1-10";
+  auto reader = std::make_unique<RedoLogFileReader>();
+  auto [data, fileSize] = reader->readFromFile(file_name);
+  auto bufferReader = std::make_unique<BufferReader>(data.get(), fileSize);
 
-TEST(DDL_TEST, DISABLED_CREATE_DB_LEN) {
-    LogFormatTransformManager mgr;
-    // 待解析的 数据
-    auto [data, fileSize] = mgr.readFileAsBinary();
+  auto sql_len = bufferReader->read<uint32_t>();
+  EXPECT_EQ(sql_len, 248);
 
-    auto reader = std::make_unique<MyReader>(data.get(), fileSize);
+  std::vector<unsigned char> buf(sql_len);
+  bufferReader->memcpy<unsigned char *>(buf.data(), sql_len);
+  auto ddl = GetDDL(buf.data());
 
-    auto sql_len = reader->read<uint32_t>();
+  auto ckp = ddl->check_point();
+  EXPECT_STREQ(ckp->c_str(), "31-1-54348795023361");
 
-    EXPECT_EQ(sql_len, 248);
+  auto dbName = ddl->db_name();
+  EXPECT_TRUE(dbName == nullptr);
+
+  auto ddlSql = ddl->ddl_sql();
+  EXPECT_STREQ(ddlSql->c_str(), "create database t1");
+
+  auto ddlType = ddl->ddl_type();
+  EXPECT_STREQ(ddlType->c_str(), "CREATE TABLE");
+
+  auto lastCommit = ddl->last_commit();
+  EXPECT_EQ(lastCommit, 30);
+
+  auto msgTime = ddl->msg_time();
+  EXPECT_STREQ(msgTime->c_str(), "2024-08-01 14:32:41.000054");
+
+  auto opType = ddl->op_type();
+  EXPECT_STREQ(opType->c_str(), "DDL");
+
+  auto scn = ddl->scn();
+  EXPECT_EQ(scn, 54348795023361);
+
+  auto seq = ddl->seq();
+  EXPECT_EQ(seq, 1);
+
+  auto table = ddl->table_();
+  EXPECT_TRUE(table == nullptr);
+
+  auto txSeq = ddl->tx_seq();
+  EXPECT_EQ(txSeq, 31);
+
+  auto txTime = ddl->tx_time();
+  EXPECT_STREQ(txTime->c_str(), "2024-08-01 14:32:39.000068");
+
 }
 
-TEST(SQL_TEST, DISABLED_DDL_CREATE_DB_TABLE) {
-    // 1. 新建一个 binlog 文件，开启写功能
-    const char *test_file_name = "test1";
-    uint64_t test_file_size = 1024;
+/**
+ * @brief 测试 读 DDL sql，create table 字段格式能否正确解析，共 13 个完整字段都有数据
+ */
+TEST(DDL_TEST, CREATE_TABLE) {
+  std::string file_name = "/home/yincong/loft/testDataDir/data1-10";
+  auto reader = std::make_unique<RedoLogFileReader>();
+  auto [data, fileSize] = reader->readFromFile(file_name);
 
-    RC ret;
-    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
-    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
+  auto bufferReader = std::make_unique<BufferReader>(data.get(), fileSize);
 
-    ret = binlog->open();
-    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
+  uint32 sql_len;
+  int SKIP_CNT = 1;
+  for (int k = 0; k < SKIP_CNT; k++) {
+    sql_len = bufferReader->read<uint32_t>();
+    bufferReader->forward(sql_len);
+  }
 
-    Format_description_event fde(BINLOG_VERSION, SERVER_VERSION_STR);
-    binlog->write_event_to_binlog(&fde);
+  sql_len = bufferReader->read<uint32_t>();
+  EXPECT_EQ(sql_len, 744);
 
-    // 2. mgr 转换工具负责 读待解析的中间 flatbuffer 数据，然后调用
-    // 响应的转换函数
+  std::vector<unsigned char> buf(sql_len);
+  bufferReader->memcpy<unsigned char *>(buf.data(), sql_len);
+  auto ddl = GetDDL(buf.data());
 
-    LogFormatTransformManager mgr;
-    // 2.1 把待解析的 数据 装入 reader 中，后续可以利用 read/cpy 方法
-    auto [data, fileSize] = mgr.readFileAsBinary();
-    auto reader = std::make_unique<MyReader>(data.get(), fileSize);
+  auto ckp = ddl->check_point();
+  EXPECT_STREQ(ckp->c_str(), "33-1-54349172944897");
+
+  auto dbName = ddl->db_name();
+  EXPECT_STREQ(dbName->c_str(), "t1");
+
+  auto ddlSql = ddl->ddl_sql();
+  EXPECT_STREQ(ddlSql->c_str(), "create table t1(a1 int primary key, a2 char(20),a3 bit(23), a4 smallint, a5 smallint unsigned, a6 mediumint, a7 mediumint unsigned, a8 int unsigned, a9 bigint, a10 bigint unsigned, a11 float(10,5), a12 float(10,5) unsigned, a13 double(20,10), a14 double(20,10) unsigned, a15 decimal(10,5), a16 decimal(10,5) unsigned, a17 year(4), a18 enum('aa','bb','cc'), a19 set('dd','ee','ff'), a20 tinytext, a21 text, a22 mediumtext, a23 longtext, a24 tinyblob, a25 blob, a26 mediumblob, a27 longblob)");
+
+  auto ddlType = ddl->ddl_type();
+  EXPECT_STREQ(ddlType->c_str(), "CREATE TABLE");
+
+  auto lastCommit = ddl->last_commit();
+  EXPECT_EQ(lastCommit, 32);
+
+  auto lsn = ddl->lsn();
+  EXPECT_EQ(lsn, 279711);
+
+  auto msgTime = ddl->msg_time();
+  EXPECT_STREQ(msgTime->c_str(), "2024-08-01 14:32:41.000117");
+
+  auto opType = ddl->op_type();
+  EXPECT_STREQ(opType->c_str(), "DDL");
+
+  auto scn = ddl->scn();
+  EXPECT_EQ(scn, 54349172944897);
+
+  auto seq = ddl->seq();
+  EXPECT_EQ(seq, 1);
+
+  auto table = ddl->table_();
+  EXPECT_STREQ(table->c_str(), "temp");
+
+  auto txSeq = ddl->tx_seq();
+  EXPECT_EQ(txSeq, 33);
+
+  auto txTime = ddl->tx_time();
+  EXPECT_STREQ(txTime->c_str(), "2024-08-01 14:32:39.000160");
+
+}
+
+/**
+ * @brief 测试 读 DDL sql，drop table 字段格式能否正确解析，共 13 个完整字段都有数据
+ */
+TEST(DDL_TEST, DROP_TABLE) {
+  std::string file_name = "/home/yincong/loft/testDataDir/data1-10";
+  auto reader = std::make_unique<RedoLogFileReader>();
+  auto [data, fileSize] = reader->readFromFile(file_name);
+  auto bufferReader = std::make_unique<BufferReader>(data.get(), fileSize);
+  // 跳过前 8 条 sql
+  uint32 sql_len;
+  int SKIP_CNT = 8;
+  for (int k = 0; k < SKIP_CNT; k++) {
+    sql_len = bufferReader->read<uint32_t>();
+    bufferReader->forward(sql_len);
+  }
+
+  sql_len = bufferReader->read<uint32_t>();
+  EXPECT_EQ(sql_len, 264);
+
+  std::vector<unsigned char> buf(sql_len);
+  bufferReader->memcpy<unsigned char *>(buf.data(), sql_len);
+  auto ddl = GetDDL(buf.data());
+
+  auto ckp = ddl->check_point();
+  EXPECT_STREQ(ckp->c_str(), "43-1-54350345428993");
+
+  auto dbName = ddl->db_name();
+  EXPECT_STREQ(dbName->c_str(), "t1");
+
+  auto ddlSql = ddl->ddl_sql();
+  EXPECT_STREQ(ddlSql->c_str(), "drop table t1");
+
+  auto ddlType = ddl->ddl_type();
+  EXPECT_STREQ(ddlType->c_str(), "DROP TABLE");
+
+  auto lastCommit = ddl->last_commit();
+  EXPECT_EQ(lastCommit, 42);
+
+  auto lsn = ddl->lsn();
+  EXPECT_EQ(lsn, 280191);
+
+  auto msgTime = ddl->msg_time();
+  EXPECT_STREQ(msgTime->c_str(), "2024-08-01 14:32:41.000156");
+
+  auto opType = ddl->op_type();
+  EXPECT_STREQ(opType->c_str(), "DDL");
+
+  auto scn = ddl->scn();
+  EXPECT_EQ(scn, 54350345428993);
+
+  auto seq = ddl->seq();
+  EXPECT_EQ(seq, 1);
+
+  auto table = ddl->table_();
+  EXPECT_STREQ(table->c_str(), "temp");
+
+  auto txSeq = ddl->tx_seq();
+  EXPECT_EQ(txSeq, 43);
+
+  auto txTime = ddl->tx_time();
+  EXPECT_STREQ(txTime->c_str(), "2024-08-01 14:32:39.000446");
+
+}
+
+/**
+ * @brief 测试 读 DDL sql，drop table 字段格式能否正确解析，缺少 dbName, ddlType, table, 共 10 个字段
+ */
+TEST(DDL_TEST, DROP_DB) {
+  std::string file_name = "/home/yincong/loft/testDataDir/data1-10";
+  auto reader = std::make_unique<RedoLogFileReader>();
+  auto [data, fileSize] = reader->readFromFile(file_name);
+  auto bufferReader = std::make_unique<BufferReader>(data.get(), fileSize);
+  // 跳过前 9 条 sql
+  uint32 sql_len;
+  int SKIP_CNT = 9;
+  for (int k = 0; k < SKIP_CNT; k++) {
+    sql_len = bufferReader->read<uint32_t>();
+    bufferReader->forward(sql_len);
+  }
+
+  sql_len = bufferReader->read<uint32_t>();
+  EXPECT_EQ(sql_len, 224);
+
+  std::vector<unsigned char> buf(sql_len);
+  bufferReader->memcpy<unsigned char *>(buf.data(), sql_len);
+  auto ddl = GetDDL(buf.data());
+
+  auto ckp = ddl->check_point();
+  EXPECT_STREQ(ckp->c_str(), "46-1-54350647873537");
+
+  auto dbName = ddl->db_name();
+  EXPECT_TRUE(dbName == nullptr);
+
+  auto ddlSql = ddl->ddl_sql();
+  EXPECT_STREQ(ddlSql->c_str(), "drop database t1");
+
+  auto ddlType = ddl->ddl_type();
+  EXPECT_TRUE(ddlType == nullptr);
+
+  auto lastCommit = ddl->last_commit();
+  EXPECT_EQ(lastCommit, 45);
+
+  auto lsn = ddl->lsn();
+  EXPECT_EQ(lsn, 281581);
+
+  auto msgTime = ddl->msg_time();
+  EXPECT_STREQ(msgTime->c_str(), "2024-08-01 14:32:41.000157");
+
+  auto opType = ddl->op_type();
+  EXPECT_STREQ(opType->c_str(), "DDL");
+
+  auto scn = ddl->scn();
+  EXPECT_EQ(scn, 54350647873537);
+
+  auto seq = ddl->seq();
+  EXPECT_EQ(seq, 1);
+
+  auto table = ddl->table_();
+  EXPECT_TRUE(table == nullptr);
+
+  auto txSeq = ddl->tx_seq();
+  EXPECT_EQ(txSeq, 46);
+
+  auto txTime = ddl->tx_time();
+  EXPECT_STREQ(txTime->c_str(), "2024-08-01 14:32:39.000520");
+
+
+}
+
+/**
+ * @brief 连续转换 2 条 DDL sql: create db + create table，并验证是否能回放成功
+ */
+TEST(SQL_TEST, DDL_CREATE_DB_TABLE) {
+    // 1. 读数据到 buffer 中
+    std::string filename = "/home/yincong/loft/testDataDir/data1-10";
+    auto logFileManager = std::make_unique<LogFileManager>();
+    logFileManager->init(DEFAULT_BINLOG_FILE_DIR, DEFAULT_BINLOG_FILE_NAME_PREFIX, DEFAULT_BINLOG_FILE_SIZE);
+
+    auto fileReader = logFileManager->get_file_reader();
+    fileReader->open(filename.c_str());
+    auto [data, fileSize] = fileReader->readFromFile(filename);
+    auto bufferReader     = std::make_unique<BufferReader>(data.get(), fileSize);
+
+    // 2. 打开最后一个 binlog 文件，准备写
+    auto fileWriter = logFileManager->get_file_writer();
+    logFileManager->last_file(*fileWriter);
 
     // 目前是读前 2 条，确定是 ddl sql
     int EPOCH = 2;
     for (int k = 0; k < EPOCH; k++) {
-        auto sql_len = reader->read<uint32_t>();
+        auto sql_len = bufferReader->read<uint32_t>();
 
         // 2.2. 进入转换流程，先初始化一片 内存空间， copy 出来
         std::vector<unsigned char> buf(sql_len);
-        reader->memcpy<unsigned char *>(buf.data(), sql_len);
-        // note！使用 flatbuffer 获取的对象，返回的是一个 raw ptr
-        // 管理内存的方法不是使用 new/delete，所以不能直接转化成 unique_ptr
-        const DDL *ddl = GetDDL(buf.data());
-        if (ddl) {
-            // Use the raw pointer directly
-            mgr.transformDDL(ddl, binlog.get());
-        } else {
-            // Handle error cases
-            std::cerr << "Failed to parse DDL object.\n";
-        }
+        bufferReader->memcpy<unsigned char *>(buf.data(), sql_len);
+
+        logFileManager->transform(std::move(buf), true);
     }
     // 3. 关闭 binlog 文件流
-    binlog->close();
+    fileWriter->close();
 }
-
-TEST(SQL_TEST, DISABLED_CREATE_DB_TABLE_INSERT1) {
+/**
+ * @brief 连续转换 3 条 sql，前 2 条是 DDL sql，后 1 条是 DML sql，验证是否能回放成功
+ */
+TEST(SQL_TEST, CREATE_DB_TABLE_INSERT1) {
     // 1. 新建一个 binlog 文件，开启写功能
-    const char *test_file_name = "test1";
-    uint64_t test_file_size = 1024;
+    std::string filename = "/home/yincong/loft/testDataDir/data1-10";
+    auto logFileManager = std::make_unique<LogFileManager>();
+    logFileManager->init(DEFAULT_BINLOG_FILE_DIR, DEFAULT_BINLOG_FILE_NAME_PREFIX, DEFAULT_BINLOG_FILE_SIZE);
 
-    RC ret;
-    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
-    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
+    auto fileReader = logFileManager->get_file_reader();
+    fileReader->open(filename.c_str());
+    auto [data, fileSize] = fileReader->readFromFile(filename);
+    auto bufferReader     = std::make_unique<BufferReader>(data.get(), fileSize);
 
-    ret = binlog->open();
-    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
-
-    Format_description_event fde(BINLOG_VERSION, SERVER_VERSION_STR);
-    binlog->write_event_to_binlog(&fde);
-
-
-    LogFormatTransformManager mgr;
-    // 2.1 把待解析的 数据 装入 reader 中，后续可以利用 read/cpy 方法
-    auto [data, fileSize] = mgr.readFileAsBinary();
-    auto reader = std::make_unique<MyReader>(data.get(), fileSize);
+    // 2. 打开最后一个 binlog 文件，准备写
+    auto fileWriter = logFileManager->get_file_writer();
+    logFileManager->last_file(*fileWriter);
 
     // 目前是读前 2 条，确定是 ddl sql
     int EPOCH = 2;
     for (int k = 0; k < EPOCH; k++) {
-        auto sql_len = reader->read<uint32_t>();
+        auto sql_len = bufferReader->read<uint32_t>();
 
         // 2.2. 进入转换流程，先初始化一片 内存空间， copy 出来
         std::vector<unsigned char> buf(sql_len);
-        reader->memcpy<unsigned char *>(buf.data(), sql_len);
-        // note！使用 flatbuffer 获取的对象，返回的是一个 raw ptr
-        // 管理内存的方法不是使用 new/delete，所以不能直接转化成 unique_ptr
-        const DDL *ddl = GetDDL(buf.data());
-        if (ddl) {
-            // Use the raw pointer directly
-            mgr.transformDDL(ddl, binlog.get());
-        } else {
-            // Handle error cases
-            std::cerr << "Failed to parse DDL object.\n";
-        }
+        bufferReader->memcpy<unsigned char *>(buf.data(), sql_len);
+
+        logFileManager->transform(std::move(buf), true);
     }
     //////////////////////////////////////
     // 接着读第 3 条 insert1
-    auto insert_len = reader->read<uint32_t>();
+    auto insert_len = bufferReader->read<uint32_t>();
 
-    // 2.2. 进入转换流程，先初始化一片 内存空间， copy 出来
     std::vector<unsigned char> buf(insert_len);
-    reader->memcpy<unsigned char *>(buf.data(), insert_len);
-
-    const DML *dml = GetDML(buf.data());
-
-    LOFT_ASSERT(dml, "Failed to parse DML object.");
-    // Use the`  raw pointer directly
-    mgr.transformDML(dml, binlog.get());
-
+    bufferReader->memcpy<unsigned char *>(buf.data(), insert_len);
+    logFileManager->transform(std::move(buf), false);
 
     // 3. 关闭 binlog 文件流
-    binlog->close();
+    fileWriter->close();
 }
 
-TEST(DML_TEST, DISABLED_INSERT1) {
-    LogFormatTransformManager mgr;
-    // 待解析的 数据
-    auto [data, fileSize] = mgr.readFileAsBinary();
-    auto reader = std::make_unique<MyReader>(data.get(), fileSize);
-    // 跳过前 2 条
-    reader->forward(
-        sizeof(uint32_t) * 2 + SQL_SIZE_ARRAY[0] + SQL_SIZE_ARRAY[1]
-    );
+/**
+ * @brief 验证读 DML insert2 sql，字段格式能否正确解析 [newData] 缺少 a12 a19 a20
+ *        update / delete sql 的逻辑一致，其中insert2 最具有代表性（keys 和 newData 字段解析结构是相同的，都是 kvPairs，insert2的newData里有null类型）
+ *        主要是验证 [fields]:嵌套 FieldMeta 和 [newData]: value有long, double string, null四个类型
+ */
+TEST(DML_TEST, INSERT2) {
+  // 1. 读数据到 buffer 中
+  std::string filename = "/home/yincong/loft/testDataDir/data1-10";
+  auto logFileManager = std::make_unique<LogFileManager>();
+  logFileManager->init(DEFAULT_BINLOG_FILE_DIR, DEFAULT_BINLOG_FILE_NAME_PREFIX, DEFAULT_BINLOG_FILE_SIZE);
 
-    auto sql_len = reader->read<uint32_t>();
+  auto fileReader = logFileManager->get_file_reader();
+  fileReader->open(filename.c_str());
+  auto [data, fileSize] = fileReader->readFromFile(filename);
+  auto bufferReader     = std::make_unique<BufferReader>(data.get(), fileSize);
 
-    EXPECT_EQ(sql_len, 3304);
+  // 跳过前 3 条
+  int SKIP_CNT = 3;
+  for (int k = 0; k < SKIP_CNT; k++) {
+    auto sql_len = bufferReader->read<uint32_t>();
+    bufferReader->forward(sql_len);
+  }
 
-    std::vector<unsigned char> buf(sql_len);
-    reader->memcpy<unsigned char *>(buf.data(), sql_len);
+  auto sql_len = bufferReader->read<uint32_t>();
+  EXPECT_EQ(sql_len, 3208);
 
-    const DML *dml = GetDML(buf.data());
-    // ************* 填数据 begin ************************
-    auto dbName = dml->db_name();
-    EXPECT_EQ(std::strcmp(dbName->c_str(), "t1"), 0);
+  std::vector<unsigned char> buf(sql_len);
+  bufferReader->memcpy<unsigned char *>(buf.data(), sql_len);
+ const DML *dml = GetDML(buf.data());
+  // ************* 填数据 begin ************************
+ auto ckp = dml->check_point();
+  EXPECT_STREQ(ckp->c_str(), "38-1-54349495054337");
 
-    auto fields = dml->fields();
-    EXPECT_EQ(fields->size(), 27);
+  auto dbName = dml->db_name();
+  EXPECT_EQ(std::strcmp(dbName->c_str(), "t1"), 0);
 
-    std::vector<std::unique_ptr<Field>> field_vec;
-    for (const auto &field : *fields) {
-        field->name();
-        auto fieldMeta = field->meta();
-        fieldMeta->length();
-        fieldMeta->is_unsigned();
-        fieldMeta->nullable();
-        fieldMeta->data_type(); // 根据 这里的类型，构建 对应的 Field 对象
-        fieldMeta->precision();
-    }
+  auto dn = dml->dn();
+  EXPECT_EQ(dn, 0);
 
-    // insert 没有 keys 要判断一下
-    auto keys = dml->keys();
-    if (keys) {
-        std::cout << "insert sql not comes here" << std::endl;
-    }
+  auto fields = dml->fields();
+  EXPECT_EQ(fields->size(), 27);
+  // ************* check 第一个 fields [字段名，fieldmeta(整数，bool，字符串)]************************
+  auto field1 = fields->Get(0);
+  auto fieldMeta = field1->meta();
+  EXPECT_STREQ(field1->name()->c_str(), "a1");
+  EXPECT_EQ(fieldMeta->length(), 0);
+  EXPECT_EQ(fieldMeta->is_unsigned(), false);
+  EXPECT_EQ(fieldMeta->nullable(), false);
+  EXPECT_STREQ(fieldMeta->data_type()->c_str(), "INT");
+  EXPECT_EQ(fieldMeta->precision(), 0);
 
-    auto lastCommit = dml->last_commit();
-    EXPECT_EQ(lastCommit, 33);
+  // insert 没有 keys 要判断一下
+  auto keys = dml->keys();
+  EXPECT_TRUE(keys == nullptr);
 
-    auto immediateCommitTs = dml->msg_time();
+  auto lastCommit = dml->last_commit();
+  EXPECT_EQ(lastCommit, 33);
 
-    auto newData = dml->new_data();
+  auto lsn = dml->lsn();
+  EXPECT_EQ(lsn, 279792);
 
-    auto opType = dml->op_type();
-    EXPECT_EQ(std::strcmp(opType->c_str(), "I"), 0);
+  auto immediateCommitTs = dml->msg_time();
+  EXPECT_STREQ(immediateCommitTs->c_str(), "2024-08-01 14:32:41.000145");
+  // ************* check newData ************************
+  auto newData = dml->new_data();
+  EXPECT_EQ(newData->size(), 27); // 注意，这里还是 27 个，只是 null 数值的没有显示，但在二进制内容中还占位
 
-    auto table = dml->table_();
-    EXPECT_EQ(std::strcmp(table->c_str(), "t1"), 0);
+  // ************* newData[a11] 是 double 类型 ************************
+  auto newData11 = newData->Get(0);
+  EXPECT_STREQ(newData11->key()->c_str(), "a11");
+  EXPECT_DOUBLE_EQ(newData11->value_as_DoubleVal()->value(), 3.402820110321045);
 
-    auto seqNo = dml->tx_seq();
-    EXPECT_EQ(seqNo, 35);
+  // ************* newData[a10] 是 long 类型 ************************
+  auto newData10 = newData->Get(1);
+  EXPECT_STREQ(newData10->key()->c_str(), "a10");
+  EXPECT_EQ(newData10->value_as_LongVal()->value(), -1);
 
-    auto originalCommitTs = dml->tx_time();
+  // ************* newData[a15] 是 string 类型，是 decimal 的字符串表示 ********
+  auto newData15 = newData->Get(4);
+  EXPECT_STREQ(newData15->key()->c_str(), "a15");
+  EXPECT_STREQ(newData15->value_as_StringVal()->value()->c_str(), "3.40282");
+
+  // ************* newData[a2] 是 string 类型，是 mysql 字符类型的 base64 加密表示， 还要 base64明文编码出来***
+  auto newData2 = newData->Get(19);
+  EXPECT_STREQ(newData2->key()->c_str(), "a2");
+  const char *value = newData2->value_as_StringVal()->value()->c_str();
+
+  char *dst = (char *)malloc(base64_needed_decoded_length(strlen(value)));
+  int64_t dst_len = base64_decode(value, strlen(value), (void *)dst, nullptr, 0);
+  EXPECT_STREQ(dst, "a");
+  EXPECT_EQ(dst_len, 1);
+
+  // ************* newData[a12] 是 null 类型 ************************
+  auto newData12 = newData->Get(3);
+  EXPECT_STREQ(newData12->key()->c_str(), "a12");
+  EXPECT_TRUE(newData12->value() == nullptr);
+
+  auto opType = dml->op_type();
+  EXPECT_STREQ(opType->c_str(), "I");
+
+  auto scn = dml->scn();
+  EXPECT_EQ(scn, 54349495054337);
+
+  auto table = dml->table_();
+  EXPECT_STREQ(table->c_str(), "t1");
+
+  auto seqNo = dml->tx_seq();
+  EXPECT_EQ(seqNo, 38);
+
+  auto originalCommitTs = dml->tx_time();
+  EXPECT_STREQ(originalCommitTs->c_str(), "2024-08-01 14:32:39.000238");
 }
 
-TEST(SQL_TEST, DISABLED_DML_INSERT) {
-    // 1. 新建一个 binlog 文件，开启写功能
-    const char *test_file_name = "test1";
-    uint64_t test_file_size = 1024;
+/**
+ * @brief 连续转换 3 条 DML insert sql，并验证是否能回放成功
+ */
+TEST(SQL_TEST, DML_INSERT) {
+  // 1. 新建一个 binlog 文件，开启写功能
+  std::string filename = "/home/yincong/loft/testDataDir/data1-10";
+  auto logFileManager = std::make_unique<LogFileManager>();
+  logFileManager->init(DEFAULT_BINLOG_FILE_DIR, DEFAULT_BINLOG_FILE_NAME_PREFIX, DEFAULT_BINLOG_FILE_SIZE);
 
-    RC ret;
-    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
-    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
+  auto fileReader = logFileManager->get_file_reader();
+  fileReader->open(filename.c_str());
+  auto [data, fileSize] = fileReader->readFromFile(filename);
+  auto bufferReader     = std::make_unique<BufferReader>(data.get(), fileSize);
 
-    ret = binlog->open();
-    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
-    // 先写 fde
-    Format_description_event fde(BINLOG_VERSION, SERVER_VERSION_STR);
-    binlog->write_event_to_binlog(&fde);
+  // 2. 打开最后一个 binlog 文件，准备写
+  auto fileWriter = logFileManager->get_file_writer();
+  logFileManager->last_file(*fileWriter);
 
-    LogFormatTransformManager mgr;
-    // 2.1 把待解析的 数据 装入 reader 中，后续可以利用 read/cpy 方法
-    auto [data, fileSize] = mgr.readFileAsBinary();
-    auto reader = std::make_unique<MyReader>(data.get(), fileSize);
+  // 跳过前 2 条
+  uint32 sql_len;
+  int SKIP_CNT = 2;
+  for (int k = 0; k < SKIP_CNT; k++) {
+    sql_len = bufferReader->read<uint32_t>();
+    bufferReader->forward(sql_len);
+  }
 
-    // 跳过前 2 条
-    const int SKIP_CNT = 2;
-    size_t skip_sql_sz = 0;
-    for (int i = 0; i < SKIP_CNT; i++)
-        skip_sql_sz += SQL_SIZE_ARRAY[i];
-    reader->forward(sizeof(uint32_t) * SKIP_CNT + skip_sql_sz);
+  // 读第 345 条，确定是 insert sql
+  int EPOCH = 3;
+  for (int k = 0; k < EPOCH; k++) {
+      sql_len = bufferReader->read<uint32_t>();
 
-    // 读第 345 条，确定是 insert sql
-    int EPOCH = 3;
-    for (int k = 0; k < EPOCH; k++) {
-        auto sql_len = reader->read<uint32_t>();
+      std::vector<unsigned char> buf(sql_len);
+      bufferReader->memcpy<unsigned char *>(buf.data(), sql_len);
 
-        // 2.2. 进入转换流程，先初始化一片 内存空间， copy 出来
-        std::vector<unsigned char> buf(sql_len);
-        reader->memcpy<unsigned char *>(buf.data(), sql_len);
-        // note！使用 flatbuffer 获取的对象，返回的是一个 raw ptr
-        // 管理内存的方法不是使用 new/delete，所以不能直接转化成 unique_ptr
-        const DML *dml = GetDML(buf.data());
-
-        LOFT_ASSERT(dml, "Failed to parse DML object.");
-        // Use the`  raw pointer directly
-        mgr.transformDML(dml, binlog.get());
-    }
-
-    // 3. 关闭 binlog 文件流
-    binlog->flush();
-    binlog->close();
+      logFileManager->transform(std::move(buf), false);
+  }
+  // 3. 关闭 binlog 文件流
+  fileWriter->close();
 }
 
-TEST(SQL_TEST, DISABLED_DML_UPDATE) {
-    // 1. 新建一个 binlog 文件，开启写功能
-    const char *test_file_name = "test1";
-    uint64_t test_file_size = 1024;
+/**
+ * @brief 连续转换 2 条 DML update sql，并验证是否能回放成功
+ */
+TEST(SQL_TEST, DML_UPDATE) {
+  // 1. 新建一个 binlog 文件，开启写功能
+  std::string filename = "/home/yincong/loft/testDataDir/data1-10";
+  auto logFileManager = std::make_unique<LogFileManager>();
+  logFileManager->init(DEFAULT_BINLOG_FILE_DIR, DEFAULT_BINLOG_FILE_NAME_PREFIX, DEFAULT_BINLOG_FILE_SIZE);
 
-    RC ret;
-    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
-    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
+  auto fileReader = logFileManager->get_file_reader();
+  fileReader->open(filename.c_str());
+  auto [data, fileSize] = fileReader->readFromFile(filename);
+  auto bufferReader     = std::make_unique<BufferReader>(data.get(), fileSize);
 
-    ret = binlog->open();
-    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
+  // 2. 打开最后一个 binlog 文件，准备写
+  auto fileWriter = logFileManager->get_file_writer();
+  logFileManager->last_file(*fileWriter);
 
-    // 先写 fde
-    Format_description_event fde(BINLOG_VERSION, SERVER_VERSION_STR);
-    binlog->write_event_to_binlog(&fde);
+  // 跳过前 5 条
+  uint32 sql_len;
+  int SKIP_CNT = 5;
+  for (int k = 0; k < SKIP_CNT; k++) {
+    sql_len = bufferReader->read<uint32_t>();
+    bufferReader->forward(sql_len);
+  }
 
-    LogFormatTransformManager mgr;
-    // 2.1 把待解析的 数据 装入 reader 中，后续可以利用 read/cpy 方法
-    auto [data, fileSize] = mgr.readFileAsBinary();
-    auto reader = std::make_unique<MyReader>(data.get(), fileSize);
+  // 读第 67 条，确定是 update sql
+  int EPOCH = 2;
+  for (int k = 0; k < EPOCH; k++) {
+      sql_len = bufferReader->read<uint32_t>();
 
-    // 跳过前 5 条
-    const int SKIP_CNT = 5;
-    size_t skip_sql_sz = 0;
-    for (int i = 0; i < SKIP_CNT; i++)
-        skip_sql_sz += SQL_SIZE_ARRAY[i];
-    reader->forward(sizeof(uint32_t) * SKIP_CNT + skip_sql_sz);
+      std::vector<unsigned char> buf(sql_len);
+      bufferReader->memcpy<unsigned char *>(buf.data(), sql_len);
 
-    // 读第 67 条，确定是 update sql
-    int EPOCH = 2;
-    for (int k = 0; k < EPOCH; k++) {
-        auto sql_len = reader->read<uint32_t>();
-
-        // 2.2. 进入转换流程，先初始化一片 内存空间， copy 出来
-        std::vector<unsigned char> buf(sql_len);
-        reader->memcpy<unsigned char *>(buf.data(), sql_len);
-        // note！使用 flatbuffer 获取的对象，返回的是一个 raw ptr
-        // 管理内存的方法不是使用 new/delete，所以不能直接转化成 unique_ptr
-        const DML *dml = GetDML(buf.data());
-
-        LOFT_ASSERT(dml, "Failed to parse DML object.");
-        // Use the`  raw pointer directly
-        mgr.transformDML(dml, binlog.get());
-    }
-
-    // 3. 关闭 binlog 文件流
-    binlog->flush();
-    binlog->close();
+      logFileManager->transform(std::move(buf), false);
+  }
+  // 3. 关闭 binlog 文件流
+  fileWriter->close();
 }
 
-TEST(SQL_TEST, DISABLED_DML_DELETE) {
-    // 1. 新建一个 binlog 文件，开启写功能
-    const char *test_file_name = "test1";
-    uint64_t test_file_size = 1024;
+/**
+ * @brief 转换 1 条 DML insert sql，并验证是否能回放成功
+ */
+TEST(SQL_TEST, DML_DELETE) {
+  // 1. 新建一个 binlog 文件，开启写功能
+  std::string filename = "/home/yincong/loft/testDataDir/data1-10";
+  auto logFileManager = std::make_unique<LogFileManager>();
+  logFileManager->init(DEFAULT_BINLOG_FILE_DIR, DEFAULT_BINLOG_FILE_NAME_PREFIX, DEFAULT_BINLOG_FILE_SIZE);
 
-    RC ret;
-    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
-    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
+  auto fileReader = logFileManager->get_file_reader();
+  fileReader->open(filename.c_str());
+  auto [data, fileSize] = fileReader->readFromFile(filename);
+  auto bufferReader     = std::make_unique<BufferReader>(data.get(), fileSize);
 
-    ret = binlog->open();
-    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
-    // 先写 fde
-    Format_description_event fde(BINLOG_VERSION, SERVER_VERSION_STR);
-    binlog->write_event_to_binlog(&fde);
+  // 2. 打开最后一个 binlog 文件，准备写
+  auto fileWriter = logFileManager->get_file_writer();
+  logFileManager->last_file(*fileWriter);
 
-    LogFormatTransformManager mgr;
-    // 2.1 把待解析的 数据 装入 reader 中，后续可以利用 read/cpy 方法
-    auto [data, fileSize] = mgr.readFileAsBinary();
-    auto reader = std::make_unique<MyReader>(data.get(), fileSize);
+  // 跳过前 7 条
+  uint32 sql_len;
+  int SKIP_CNT = 7;
+  for (int k = 0; k < SKIP_CNT; k++) {
+    sql_len = bufferReader->read<uint32_t>();
+    bufferReader->forward(sql_len);
+  }
 
-    // 跳过前 7 条
-    const int SKIP_CNT = 7;
-    size_t skip_sql_sz = 0;
-    for (int i = 0; i < SKIP_CNT; i++)
-        skip_sql_sz += SQL_SIZE_ARRAY[i];
-    reader->forward(sizeof(uint32_t) * SKIP_CNT + skip_sql_sz);
 
-    // 读第 8 条，确定是 delete sql
-    int EPOCH = 1;
-    for (int k = 0; k < EPOCH; k++) {
-        auto sql_len = reader->read<uint32_t>();
+  // 读第 8 条，确定是 delete sql
+  int EPOCH = 1;
+  for (int k = 0; k < EPOCH; k++) {
+      sql_len = bufferReader->read<uint32_t>();
 
-        // 2.2. 进入转换流程，先初始化一片 内存空间， copy 出来
-        std::vector<unsigned char> buf(sql_len);
-        reader->memcpy<unsigned char *>(buf.data(), sql_len);
-        // note！使用 flatbuffer 获取的对象，返回的是一个 raw ptr
-        // 管理内存的方法不是使用 new/delete，所以不能直接转化成 unique_ptr
-        const DML *dml = GetDML(buf.data());
+      std::vector<unsigned char> buf(sql_len);
+      bufferReader->memcpy<unsigned char *>(buf.data(), sql_len);
 
-        LOFT_ASSERT(dml, "Failed to parse DML object.");
-        // Use the`  raw pointer directly
-        mgr.transformDML(dml, binlog.get());
-    }
+      logFileManager->transform(std::move(buf), false);
+  }
 
-    // 3. 关闭 binlog 文件流
-    binlog->flush();
-    binlog->close();
+  // 3. 关闭 binlog 文件流
+  fileWriter->close();
 }
 
-TEST(SQL_TEST, DISABLED_DDL_DROP_DB_TABLE) {
-    // 1. 新建一个 binlog 文件，开启写功能
-    const char *test_file_name = "test1";
-    uint64_t test_file_size = 1024;
+/**
+ * @brief 连续转换 2 条 DDL sql: drop table + drop db，并验证是否能回放成功
+ */
+TEST(SQL_TEST, DDL_DROP_DB_TABLE) {
+  // 1. 新建一个 binlog 文件，开启写功能
+  std::string filename = "/home/yincong/loft/testDataDir/data1-10";
+  auto logFileManager = std::make_unique<LogFileManager>();
+  logFileManager->init(DEFAULT_BINLOG_FILE_DIR, DEFAULT_BINLOG_FILE_NAME_PREFIX, DEFAULT_BINLOG_FILE_SIZE);
 
-    RC ret;
-    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
-    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
+  auto fileReader = logFileManager->get_file_reader();
+  fileReader->open(filename.c_str());
+  auto [data, fileSize] = fileReader->readFromFile(filename);
+  auto bufferReader     = std::make_unique<BufferReader>(data.get(), fileSize);
 
-    ret = binlog->open();
-    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
+  // 2. 打开最后一个 binlog 文件，准备写
+  auto fileWriter = logFileManager->get_file_writer();
+  logFileManager->last_file(*fileWriter);
 
-    LogFormatTransformManager mgr;
-    // 2.1 把待解析的 数据 装入 reader 中，后续可以利用 read/cpy 方法
-    auto [data, fileSize] = mgr.readFileAsBinary();
-    auto reader = std::make_unique<MyReader>(data.get(), fileSize);
+  // 跳过前 8 条
+  uint32 sql_len;
+  int SKIP_CNT = 8;
+  for (int k = 0; k < SKIP_CNT; k++) {
+    sql_len = bufferReader->read<uint32_t>();
+    bufferReader->forward(sql_len);
+  }
 
-    // 跳过前 8 条
-    const int SKIP_CNT = 8;
-    size_t skip_sql_sz = 0;
-    for (int i = 0; i < SKIP_CNT; i++)
-        skip_sql_sz += SQL_SIZE_ARRAY[i];
-    reader->forward(sizeof(uint32_t) * SKIP_CNT + skip_sql_sz);
+  // 读第 9 和 第 10 条，已确定是 drop table 和 drop db sql
+  int EPOCH = 2;
+  for (int k = 0; k < EPOCH; k++) {
+      sql_len = bufferReader->read<uint32_t>();
 
-    // 读第 9 和 第 10 条，已确定是 drop table 和 drop db sql
-    int EPOCH = 2;
-    for (int k = 0; k < EPOCH; k++) {
-        auto sql_len = reader->read<uint32_t>();
+      std::vector<unsigned char> buf(sql_len);
+      bufferReader->memcpy<unsigned char *>(buf.data(), sql_len);
+      logFileManager->transform(std::move(buf), true);
 
-        // 2.2. 进入转换流程，先初始化一片 内存空间， copy 出来
-        std::vector<unsigned char> buf(sql_len);
-        reader->memcpy<unsigned char *>(buf.data(), sql_len);
-        // note！使用 flatbuffer 获取的对象，返回的是一个 raw ptr
-        // 管理内存的方法不是使用 new/delete，所以不能直接转化成 unique_ptr
-        const DDL *ddl = GetDDL(buf.data());
-
-        LOFT_ASSERT(ddl, "Failed to parse DDL object.");
-
-        mgr.transformDDL(ddl, binlog.get());
-
-    }
-    // 3. 关闭 binlog 文件流
-    binlog->close();
+  }
+  // 3. 关闭 binlog 文件流
+  fileWriter->close();
 }
 
-TEST(FILE_TEST, OnlyInsertDMLSqlCnt) {
-    // 从第 5 条开始 后面是 100w 条 INSERT
-    const char *test_file_name = "test1";
-    uint64_t test_file_size = 1024 * 1024 * 1024;
-
-    RC ret;
-    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
-    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
-
-    ret = binlog->open();
-    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
-
-    auto startReadTime = std::chrono::high_resolution_clock::now(); // 记录开始时间
-
-    auto mgr = std::make_unique<LogFormatTransformManager>();
-    // 2.1 把待解析的 数据 装入 reader 中，后续可以利用 read/cpy 方法
-    auto [data, fileSize] = mgr->readFileAsBinary();
-    auto reader = std::make_unique<MyReader>(data.get(), fileSize);
-
-    auto endReadTime = std::chrono::high_resolution_clock::now(); // 记录结束时间
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endReadTime - startReadTime).count();
-    LOG_DEBUG("Read File: %ld ms", duration);
-
-    // 跳过前 4 条
-    int SKIP_COUNT = 4;
-    uint32_t skip_sql_sz = 0;
-    for (int i = 0; i < SKIP_COUNT; i++) {
-        skip_sql_sz = reader->read<uint32_t>();;
-        reader->forward(skip_sql_sz);
-    }
-
-    // 统计 DML 真实有多少条
-    int dml_cnt = 0;
-    while (reader->valid()) {
-        dml_cnt++;
-        skip_sql_sz = reader->read<uint32_t>();;
-        reader->forward(skip_sql_sz);
-    }
-    LOG_DEBUG("dml_cnt: %d", dml_cnt);
-
-}
-
-TEST(FILE_TEST, OnlyInsert100w) {
-    // 1. 新建一个 binlog 文件，开启写功能
-
-    const char *test_file_name = "test1";
-    uint64_t test_file_size = 1024 * 1024 * 1024;
-
-    RC ret;
-    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
-    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
-
-    ret = binlog->open();
-    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
-
-    auto fde = std::make_unique<Format_description_event>(BINLOG_VERSION, SERVER_VERSION_STR);
-    binlog->write_event_to_binlog(fde.get());
-    // ************* 计时 开始 ***********
-    auto startTime = std::chrono::high_resolution_clock::now(); // 记录开始时间
-
-    auto mgr = std::make_unique<LogFormatTransformManager>("/home/yincong/loft/data");
-    // 2.1 把待解析的 数据 装入 reader 中，后续可以利用 read/cpy 方法
-    auto [data, fileSize] = mgr->readFileAsBinary();
-    auto reader = std::make_unique<MyReader>(data.get(), fileSize);
-
-    // 目前是读前 3 条，确定是 ddl sql
-    int DDLEPOCH = 3;
-    for (int k = 0; k < DDLEPOCH; k++) {
-        auto sql_len = reader->read<uint32_t>();
-
-        // 2.2. 进入转换流程，先初始化一片 内存空间， copy 出来
-        std::vector<unsigned char> buf(sql_len);
-        reader->memcpy<unsigned char *>(buf.data(), sql_len);
-        // note！使用 flatbuffer 获取的对象，返回的是一个 raw ptr
-        // 管理内存的方法不是使用 new/delete，所以不能直接转化成 unique_ptr
-        const DDL *ddl = GetDDL(buf.data());
-        if (ddl) {
-            // Use the raw pointer directly
-            mgr->transformDDL(ddl, binlog.get());
-        } else {
-            // Handle error cases
-            std::cerr << "Failed to parse DDL object.\n";
-        }
-    }
-
-    auto ddlEndTime = std::chrono::high_resolution_clock::now(); // 记录结束时间
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(ddlEndTime - startTime).count();
-    LOG_DEBUG("DDL execution time: %ld ms", duration);
-
-    //////////////////////////////////////
-
-    // 跳过第 4 条
-    auto skip_sql_sz = reader->read<uint32_t>();;
-    reader->forward(skip_sql_sz);
-
-    // 接着读第 5-100w 条 insert1
-    int DMLEPOCH = 703435;
-    for (int k = 0; k < DMLEPOCH; k++) {
-        auto insert_len = reader->read<uint32_t>();
-
-        std::vector<unsigned char> buf(insert_len);
-        reader->memcpy<unsigned char *>(buf.data(), insert_len);
-
-        const DML *dml = GetDML(buf.data());
-
-        LOFT_ASSERT(dml, "Failed to parse DML object.");
-        // Use the`  raw pointer directly
-        mgr->transformDML(dml, binlog.get());
-    }
-    auto dmlEndTime = std::chrono::high_resolution_clock::now(); // 记录结束时间
-    duration = std::chrono::duration_cast<std::chrono::milliseconds>(dmlEndTime - ddlEndTime).count();
-    LOG_DEBUG("DML execution time: %ld ms", duration);
-
-    // 3. 关闭 binlog 文件流
-    binlog->close();
-}
-
-TEST(Tranform_Test, OnlyWhile) {
-
-}

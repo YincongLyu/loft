@@ -23,6 +23,8 @@ typedef intptr_t intptr;
 typedef long long int longlong;
 typedef unsigned long int ulong;
 typedef uint32 my_bitmap_map;
+typedef long long int longlong;
+
 
 #define EXTRA_ROW_INFO_LEN_OFFSET 0
 #define EXTRA_ROW_INFO_FORMAT_OFFSET 1
@@ -178,9 +180,6 @@ static void set_N_bit(uchar &f, int N) {
     mi_int4store((uchar *)(T) + 0, def_temp4);                    \
     mi_int4store((uchar *)(T) + 4, def_temp3);                    \
   }
-
-
-
 
 
 #endif // LOFT_LITTLE_ENDIAN_H

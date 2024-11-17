@@ -10,6 +10,7 @@
 #include <string>
 #include "demical.h"
 #include "field_types.h"
+#include "my_time.h"
 
 class Rows_event : public AbstractEvent{
 public :
@@ -199,6 +200,60 @@ public :
     }
     case enum_field_types::MYSQL_TYPE_JSON :
       break;
+    case enum_field_types::MYSQL_TYPE_TIME : {
+      size_t time_size = 3;
+      MYSQL_TIME ltime;
+      if(precision == 1 || precision == 2) {
+        time_size += 1;
+      }else if(precision == 3 || precision == 4) {
+        time_size += 2;
+      }else if(precision == 5 || precision == 6) {
+        time_size += 3;
+      }
+      buf_resize(buf, data_size, data_size + time_size);
+      str_to_time(data, str_length, &ltime);
+      longlong nr;
+      nr = TIME_to_longlong_time_packed(ltime);
+      my_time_packed_to_binary(nr, buf + data_size, precision);
+      data_size += time_size;
+      break;
+    }
+    case enum_field_types::MYSQL_TYPE_DATETIME : {
+      size_t datetime_size = 5;
+      MYSQL_TIME ltime;
+      if(precision == 1 || precision == 2) {
+        datetime_size += 1;
+      }else if(precision == 3 || precision == 4) {
+        datetime_size += 2;
+      }else if(precision == 5 || precision == 6) {
+        datetime_size += 3;
+      }
+      buf_resize(buf, data_size, data_size + datetime_size);
+      str_to_datetime(data, str_length, &ltime);
+      longlong nr;
+      nr = TIME_to_longlong_datetime_packed(ltime);
+      my_datetime_packed_to_binary(nr, buf + data_size, precision);
+      data_size += datetime_size;
+      break;
+    }
+    case enum_field_types::MYSQL_TYPE_TIMESTAMP : {
+      size_t timestamp_size = 4;
+      MYSQL_TIME ltime;
+      my_timeval val;
+      if(precision == 1 || precision == 2) {
+        timestamp_size += 1;
+      }else if(precision == 3 || precision == 4) {
+        timestamp_size += 2;
+      }else if(precision == 5 || precision == 6) {
+        timestamp_size += 3;
+      }
+      buf_resize(buf, data_size, data_size + timestamp_size);
+      str_to_datetime(data, str_length, &ltime);
+      datetime_to_timeval(&ltime, &val);
+      my_timestamp_to_binary(&val, buf, precision);
+      data_size += timestamp_size;        
+      break;
+    }
     default: 
       break;
     }
@@ -333,5 +388,8 @@ std::unordered_map<std::string, enum_field_types>  f_types = {
     {"CHAR", enum_field_types::MYSQL_TYPE_STRING},
     {"VARCHAR", enum_field_types::MYSQL_TYPE_VARCHAR},
     {"JSON", enum_field_types::MYSQL_TYPE_JSON},
+    {"TIMESTAMP", enum_field_types::MYSQL_TYPE_TIMESTAMP},
+    {"TIME", enum_field_types::MYSQL_TYPE_TIME},
+    {"DATETIME", enum_field_types::MYSQL_TYPE_DATETIME}
   };
 };

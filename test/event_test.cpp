@@ -292,20 +292,19 @@ TEST(EVENT_FORMAT_TEST, ROWS_EVENT) {
     std::vector<bool> after_null{false};
     const char *test_file_name = "test_rows";
     uint64_t test_file_size = 1024;
-    std::string str = "liweihao";
+    std::string str = "03:22:00";
     int num = 2;
     std::string type = "INT";
-    std::string type2 = "CHAR";
+    std::string type2 = "TIME";
     if (!binlog.open(test_file_name, test_file_size)) {
         std::cerr << "Failed to open binlog file." << std::endl;
     }
-    Rows_event row(103,27,1,Log_event_type::UPDATE_ROWS_EVENT);
+    Rows_event row(103,2,1,Log_event_type::WRITE_ROWS_EVENT);
     row.set_rows_before(before_rows);
     row.set_rows_after(after_rows);
     row.set_null_after(after_null);
     row.set_null_before(before_null);
-    row.write_data_after(str.data(),type2,80,str.size());
-    row.write_data_before(&num, type);
+    row.write_data_after(str.data(),type2,0,str.size());
     Format_description_event fde(4, "8.0.26");
     binlog.write_event_to_binlog(&fde);
     binlog.write_event_to_binlog(&row);

@@ -174,6 +174,8 @@ RC LogFileManager::get_fileno_from_filename(
 ) {
 
     if (!filename.starts_with(file_prefix_)) {
+        LOG_INFO("invalid log file name: cannot calc lsn. filename=%s, error=%s",
+                  filename.c_str(), strerror(static_cast<int>(result.ec)));
         return RC::INVALID_ARGUMENT;
     }
 
@@ -241,31 +243,64 @@ RC LogFileManager::transform(const char *filename, bool is_ddl) {
     return RC::SUCCESS;
 }
 
+/**
+ * @brief 同步 调用 transform()
+ */
 RC LogFileManager::transform(std::vector<unsigned char> &&buf, bool is_ddl) {
 
-  if (!file_writer_->get_binlog()->remain_bytes_safe()) {
-    this->next_file(*file_writer_.get());
-  }
+  // 1. 此处实现一个堆积，放到 ring_buffer_ 里，后续的执行线程取任务
+  Task task(std::move(buf), is_ddl);
 
-  if (is_ddl) {
-    const DDL *ddl = GetDDL(buf.data());
-
-    file_ckp_[last_file_no_] = ddl->check_point()->c_str();
-
-    transform_manager_->transformDDL(ddl, file_writer_->get_binlog());
-  } else {
-    const DML *dml = GetDML(buf.data());
-    file_ckp_[last_file_no_] = dml->check_point()->c_str();
-    transform_manager_->transformDML(dml, file_writer_->get_binlog());
+  // 2. 后面就开始线程从 TaskQueue 里拿取任务
+  if (!ring_buffer_->write(std::move(task))) {
+    LOG_ERROR("Failed to write task to ring buffer, should wait to write.");
+    return RC::SPEED_LIMIT;
   }
 
   return RC::SUCCESS;
+
+}
+
+/**
+ * @brief 异步调用，移动拷贝数据，批处理
+ * @param buf
+ * @param is_ddl
+ * @return
+ */
+std::future<RC> LogFileManager::transformAsync(std::vector<unsigned char>&& buf, bool is_ddl) {
+  auto promise = std::make_shared<std::promise<RC>>();
+  auto future = promise->get_future();
+
+  try {
+    // 直接移动 buf，避免拷贝
+    Task task(std::move(buf), is_ddl);
+
+    if (!ring_buffer_->write(std::move(task))) { // 这里也使用移动语义
+      promise->set_value(RC::SPEED_LIMIT);
+      return future;
+    }
+
+    size_t current_pending = ++pending_tasks_;
+    // 只有当积累了足够的任务或者是DDL任务时才通知消费者
+    if (current_pending >= BATCH_SIZE) {
+      task_cond_.notify_one();
+    }
+
+    promise->set_value(RC::SUCCESS);
+  } catch (const std::exception& e) {
+    promise->set_exception(std::current_exception());
+  }
+
+  return future;
 }
 
 LogFileManager::LogFileManager()
     : file_reader_(std::make_unique<RedoLogFileReader>()),
     file_writer_(std::make_unique<BinLogFileWriter>()),
-    transform_manager_(std::make_unique<LogFormatTransformManager>()) {
+    transform_manager_(std::make_unique<LogFormatTransformManager>()){
+
+  stop_threads_ = false;
+  consumer_thread_ = std::thread(&LogFileManager::process_tasks, this);
     // 其他初始化操作可以放在这里，比如加载已有日志文件的索引，设置初始状态等
 }
 
@@ -320,6 +355,13 @@ LogFileManager::~LogFileManager() {
     ::close(index_fd_);
     index_fd_ = -1;
   }
+  // 关闭线程
+  stop_threads_ = true;
+  task_cond_.notify_one();  // 通知处理线程退出
+  if (consumer_thread_.joinable()) {
+    consumer_thread_.join();
+  }
+  delete ring_buffer_;
 }
 
 RC LogFileManager::write_filename2index(std::string &filename) {
@@ -338,18 +380,8 @@ RC LogFileManager::write_filename2index(std::string &filename) {
 RC LogFileManager::get_last_status_from_filename(
     const std::string &filename, uint64 &scn, uint32 &seq, std::string &ckp)
 {
-
-  // 找到. 符号的位置
-  std::string numberString;
-  size_t dotPos = filename.find('.');
-  if (dotPos != std::string::npos && filename.substr(0, dotPos) == DEFAULT_BINLOG_FILE_NAME_PREFIX ) {
-    numberString = filename.substr(dotPos + 1);
-  } else {
-    LOG_ERROR("binlog file name format error");
-    return RC::FILE_NOT_EXIST;
-  }
-  // 将数字字符串转换为整数
-  uint32 file_no = static_cast<uint32_t>(std::strtoul(numberString.c_str(), nullptr, 10));
+  uint32 file_no;
+  get_fileno_from_filename(filename, file_no);
 
   // 处理 ckp，返回查询值
   ckp = file_ckp_[file_no];
@@ -372,4 +404,54 @@ RC LogFileManager::get_last_status_from_filename(
   scn = numbers[0];
   seq = static_cast<uint32>(numbers[1]);
   return RC::SUCCESS;
+}
+
+/**
+ * @brief 批处理
+ */
+void LogFileManager::process_tasks() {
+  std::vector<Task> batch_tasks;
+  batch_tasks.reserve(BATCH_SIZE);
+
+  while (!stop_threads_) {
+    {
+      std::unique_lock<std::mutex> lock(task_mutex_);
+      // 等待直到有足够的任务或被通知停止
+      task_cond_.wait(lock, [this] {
+        return stop_threads_ || pending_tasks_ >= BATCH_SIZE ||
+               (pending_tasks_ > 0);
+      });
+
+      if (stop_threads_ && pending_tasks_ == 0) break;
+
+      // 批量读取任务
+      size_t tasks_to_read = std::min(pending_tasks_.load(), BATCH_SIZE);
+      for (size_t i = 0; i < tasks_to_read; ++i) {
+        Task task;
+        if (ring_buffer_->read(task)) {
+          batch_tasks.push_back(std::move(task));
+          --pending_tasks_;
+        }
+      }
+    }
+
+    // 批量处理任务
+    for (const auto& task : batch_tasks) {
+      if (!file_writer_->get_binlog()->remain_bytes_safe()) {
+        this->next_file(*file_writer_);
+      }
+
+      if (task.is_ddl_) {
+        const DDL* ddl = GetDDL(task.data_.data());
+        file_ckp_[last_file_no_] = ddl->check_point()->c_str();
+        transform_manager_->transformDDL(ddl, file_writer_->get_binlog());
+      } else {
+        const DML* dml = GetDML(task.data_.data());
+        file_ckp_[last_file_no_] = dml->check_point()->c_str();
+        transform_manager_->transformDML(dml, file_writer_->get_binlog());
+      }
+    }
+
+    batch_tasks.clear();
+  }
 }

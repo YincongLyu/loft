@@ -26,6 +26,9 @@ public:
   // 组装 5 个 event
   void transformDML(const DML *dml, MYSQL_BIN_LOG *binLog);
 
+  std::vector<std::unique_ptr<AbstractEvent>> transformDDL(const DDL *ddl);
+  std::vector<std::unique_ptr<AbstractEvent>> transformDML(const DML *dml);
+
 private:
   inline uint64_t stringToTimestamp(const std::string& timeString);
   inline enum_field_types ConvertStringType(std::string_view type_str);

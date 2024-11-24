@@ -171,6 +171,11 @@ public:
   auto get_file_writer() -> BinLogFileWriter * { return file_writer_.get(); }
   auto get_transform_manager() -> LogFormatTransformManager * { return transform_manager_.get(); }
 
+  /**
+   * @brief 等待 BatchQueue 和 ResultQueue 的任务都完成
+   */
+  void wait_for_completion();
+
   class BatchProcessor : public Runnable {
   public:
     BatchProcessor(LogFileManager* manager, std::vector<Task>&& tasks, size_t sequence)
@@ -206,6 +211,8 @@ public:
 
       // 将结果加入写入队列
       manager_->result_queue_.add_result(result);
+
+      manager_->processed_tasks_ += tasks_.size();
     }
 
   private:
@@ -241,20 +248,30 @@ public:
         std::unique_ptr<BatchProcessor> batch;
         {
           std::unique_lock<std::mutex> lock(mutex_);
-          cv_.wait_for(lock,
-              std::chrono::milliseconds(100),
-              [this] { return *stop_flag_ || !queue_.empty(); });
-
-          if (!queue_.empty()) {
-            batch = std::move(queue_.front());
-            queue_.pop();
+          if (cv_.wait_for(lock,
+                  std::chrono::milliseconds(100),
+                  [this] { return *stop_flag_ || !queue_.empty(); })) {
+            if (*stop_flag_ && queue_.empty()) {
+              break;
+            }
+            if (!queue_.empty()) {
+              batch = std::move(queue_.front());
+              queue_.pop();
+            }
           }
         }
-
         if (batch) {
           batch->run();
         }
       }
+
+      // 主动清空剩余的任务
+      while (!queue_.empty()) {
+        auto batch = std::move(queue_.front());
+        queue_.pop();
+        batch->run();
+      }
+
     }
   };
 
@@ -267,20 +284,21 @@ public:
   };
 
   // 管理已转换完成待写入的结果队列
-  class ResultQueue {
-  private:
+  struct ResultQueue {
     std::mutex mutex_;
     std::condition_variable cv_;
-    std::queue<std::shared_ptr<BatchResult>> queue_;
+    std::unordered_map<size_t, std::shared_ptr<BatchResult>> pending_results_;
     size_t next_write_sequence_{0};
-  public:
     std::atomic<bool>* stop_flag_;
 
-  public:
+
     void add_result(std::shared_ptr<BatchResult> result) {
       std::lock_guard<std::mutex> lock(mutex_);
-      queue_.push(result);
-      cv_.notify_one();  // 只需要通知一个写入线程即可
+      pending_results_[result->sequence] = result;
+      // 只有当下一个期望序号的结果到达时才通知
+      if (pending_results_.count(next_write_sequence_) > 0) {
+        cv_.notify_one();
+      }
     }
 
     // 专门的文件写入线程
@@ -289,28 +307,32 @@ public:
         std::shared_ptr<BatchResult> result;
         {
           std::unique_lock<std::mutex> lock(mutex_);
-          cv_.wait_for(lock,
-              std::chrono::milliseconds(100),
-              [this] {
-                return *stop_flag_ ||
-                       (!queue_.empty() &&
-                           queue_.front()->sequence == next_write_sequence_);
-              });
-
-          if (!queue_.empty() && queue_.front()->sequence == next_write_sequence_) {
-            result = queue_.front();
-            queue_.pop();
+          if (cv_.wait_for(lock,
+                  std::chrono::milliseconds(100),
+                  [this] {
+                    return *stop_flag_ ||
+                           pending_results_.count(next_write_sequence_) > 0;
+                  })) {
+            if (*stop_flag_ && pending_results_.empty()) {
+              break;
+            }
+            if (pending_results_.count(next_write_sequence_) > 0) {
+              result = pending_results_[next_write_sequence_];
+              pending_results_.erase(next_write_sequence_);
+            }
           }
         }
 
         if (result) { // 检查是否要切换文件
+          manager->written_tasks_ += result->transformed_data.size();
+
           // 按顺序写入文件
           std::lock_guard<std::mutex> write_lock(manager->writer_mutex_);
           for (auto& data : result->transformed_data) {
             // 切换文件
-            if (!writer->get_binlog()->remain_bytes_safe()) {
-              manager->next_file(*writer);
-            }
+//            if (!writer->get_binlog()->remain_bytes_safe()) {
+//              manager->next_file(*writer);
+//            }
 
             // 写入实际数据, 填充 common_header 中的 log_pos 字段
             uint64_t current_pos = writer->get_binlog()->get_bytes_written();
@@ -325,7 +347,17 @@ public:
     }
 
   };
+  /**
+   * @brief 追踪处理进度
+   */
+  void log_progress() {
+    LOG_DEBUG("Pending tasks: %zu, Processed SQL num: %zu, Written Events num: %zu",
+                 pending_tasks_.load(),
+                 processed_tasks_.load(),
+                 written_tasks_.load());
+  }
 
+  void shutdown();
 private:
   void process_tasks();
   void init_thread_pool(int core_size, int max_size);
@@ -368,6 +400,9 @@ private:
   std::mutex writer_mutex_;  // 保护文件写入
   ResultQueue result_queue_;
   std::thread writer_thread_;  // 专门的写入线程
+
+  std::atomic<size_t> processed_tasks_{0};
+  std::atomic<size_t> written_tasks_{0};
 
 };
 

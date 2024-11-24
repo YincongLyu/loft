@@ -92,6 +92,8 @@ public:
       char *dst = (char *)malloc(base64_needed_decoded_length(strlen(str)));
       int64_t dst_len = base64_decode(str, strlen(str), (void *)dst, nullptr, 0);
       row->writeData(dst, field->type(), field->pack_length(), dst_len);
+      // 释放内存
+      free(dst);
     }
 
   }

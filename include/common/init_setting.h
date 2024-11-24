@@ -15,9 +15,9 @@
 // *** binlog file write configuration ***
 #define DEFAULT_BINLOG_FILE_DIR "/home/yincong/collectBin/"
 #define DEFAULT_BINLOG_FILE_NAME_PREFIX "ON"
-#define DEFAULT_BINLOG_FILE_SIZE (1024 * 1024)
+#define DEFAULT_BINLOG_FILE_SIZE (1024 * 1024 * 50)  // 每个 binlog 文件 20 M
 // 200 byte 是一个安全数
-#define WRITE_THRESHOLD  200
+#define WRITE_THRESHOLD 200
 #define BINLOG_FILE_WRITE_SAFE_SIZE (BINLOG_FILE_SIZE - WRITE_THRESHOLD)
 #define BINLOG_FILE_TTL 30s
 
@@ -25,7 +25,6 @@
 
 // arbitrary
 #define DML_TABLE_ID 13
-
 
 // *** common header ***
 #define SERVER_ID 100
@@ -39,10 +38,10 @@
 #define IMMEDIATE_SERVER_VERSION 80032
 
 // ***  query event ****
-#define USER       ""
-#define HOST       "127.0.0.1"
-#define THREAD_ID  10000
-#define EXEC_TIME  2
+#define USER ""
+#define HOST "127.0.0.1"
+#define THREAD_ID 10000
+#define EXEC_TIME 2
 #define ERROR_CODE 0
 
 #define DML_QUERY_STR "BEGIN"
@@ -50,8 +49,3 @@
 
 // IO size 一般规定为 4k，适合现代 OS disk 的读写
 constexpr const size_t IO_SIZE{4096};
-
-
-
-
-

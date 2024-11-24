@@ -2,7 +2,6 @@
 // Created by Coonger on 2024/10/17.
 //
 #include "binlog.h"
-#include "constants.h"
 
 MYSQL_BIN_LOG::MYSQL_BIN_LOG(const char *file_name, uint64_t file_size, RC &rc)
     : max_size_(file_size)
@@ -13,7 +12,7 @@ MYSQL_BIN_LOG::MYSQL_BIN_LOG(const char *file_name, uint64_t file_size, RC &rc)
     std::strncpy(file_name_, file_name, FN_REFLEN - 1);
     file_name_[FN_REFLEN - 1] = '\0'; // Null-terminate to prevent overflow
 
-    rc = RC::FILE_CREATE;
+    rc = RC::SUCCESS;
 }
 
 RC MYSQL_BIN_LOG::open() {

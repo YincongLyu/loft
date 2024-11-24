@@ -24,27 +24,30 @@
   This avoids having to do:
     foo *f; bar *b= static_cast<bar*>(static_cast<void*>(f));
  */
-template<typename T>
-inline T pointer_cast(void *p) {
-    return static_cast<T>(p);
+template <typename T>
+inline T pointer_cast(void *p)
+{
+  return static_cast<T>(p);
 }
 
-template<typename T>
-inline const T pointer_cast(const void *p) {
-    return static_cast<T>(p);
+template <typename T>
+inline const T pointer_cast(const void *p)
+{
+  return static_cast<T>(p);
 }
 
 /**
    Utility to allow returning values from functions which can fail
    (until we have std::optional).
  */
-template<class VALUE_TYPE>
-struct ReturnValueOrError {
-    /** Value returned from function in the normal case. */
-    VALUE_TYPE value;
+template <class VALUE_TYPE>
+struct ReturnValueOrError
+{
+  /** Value returned from function in the normal case. */
+  VALUE_TYPE value;
 
-    /** True if an error occurred. */
-    bool error;
+  /** True if an error occurred. */
+  bool error;
 };
 
-#endif // LOFT_TEMPLATE_UITLS_H
+#endif  // LOFT_TEMPLATE_UITLS_H

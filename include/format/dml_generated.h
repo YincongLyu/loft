@@ -7,11 +7,8 @@
 
 // Ensure the included flatbuffers.h is the same version as when this file was
 // generated, otherwise it may not be compatible.
-static_assert(
-    FLATBUFFERS_VERSION_MAJOR == 24 && FLATBUFFERS_VERSION_MINOR == 3
-        && FLATBUFFERS_VERSION_REVISION == 25,
-    "Non-compatible flatbuffers version included"
-);
+static_assert(FLATBUFFERS_VERSION_MAJOR == 24 && FLATBUFFERS_VERSION_MINOR == 3 && FLATBUFFERS_VERSION_REVISION == 25,
+    "Non-compatible flatbuffers version included");
 
 namespace loft {
 
@@ -36,906 +33,765 @@ struct kvPairBuilder;
 struct DML;
 struct DMLBuilder;
 
-enum DataType : int8_t {
-    DataType_None = 0,
-    DataType_LongData = 1,
-    DataType_DoubleData = 2,
-    DataType_StringData = 3,
-    DataType_MIN = DataType_None,
-    DataType_MAX = DataType_StringData
+enum DataType : int8_t
+{
+  DataType_None       = 0,
+  DataType_LongData   = 1,
+  DataType_DoubleData = 2,
+  DataType_StringData = 3,
+  DataType_MIN        = DataType_None,
+  DataType_MAX        = DataType_StringData
 };
 
-inline const DataType (&EnumValuesDataType())[4] {
-    static const DataType values[] = {
-        DataType_None, DataType_LongData, DataType_DoubleData,
-        DataType_StringData
-    };
-    return values;
+inline const DataType (&EnumValuesDataType())[4]
+{
+  static const DataType values[] = {DataType_None, DataType_LongData, DataType_DoubleData, DataType_StringData};
+  return values;
 }
 
-inline const char *const *EnumNamesDataType() {
-    static const char *const names[5] = {
-        "None", "LongData", "DoubleData", "StringData", nullptr
-    };
-    return names;
+inline const char *const *EnumNamesDataType()
+{
+  static const char *const names[5] = {"None", "LongData", "DoubleData", "StringData", nullptr};
+  return names;
 }
 
-inline const char *EnumNameDataType(DataType e) {
-    if (::flatbuffers::IsOutRange(e, DataType_None, DataType_StringData)) {
-        return "";
-    }
-    const size_t index = static_cast<size_t>(e);
-    return EnumNamesDataType()[index];
+inline const char *EnumNameDataType(DataType e)
+{
+  if (::flatbuffers::IsOutRange(e, DataType_None, DataType_StringData)) {
+    return "";
+  }
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesDataType()[index];
 }
 
-enum DataMeta : uint8_t {
-    DataMeta_NONE = 0,
-    DataMeta_LongVal = 1,
-    DataMeta_DoubleVal = 2,
-    DataMeta_StringVal = 3,
-    DataMeta_MIN = DataMeta_NONE,
-    DataMeta_MAX = DataMeta_StringVal
+enum DataMeta : uint8_t
+{
+  DataMeta_NONE      = 0,
+  DataMeta_LongVal   = 1,
+  DataMeta_DoubleVal = 2,
+  DataMeta_StringVal = 3,
+  DataMeta_MIN       = DataMeta_NONE,
+  DataMeta_MAX       = DataMeta_StringVal
 };
 
-inline const DataMeta (&EnumValuesDataMeta())[4] {
-    static const DataMeta values[] = {
-        DataMeta_NONE, DataMeta_LongVal, DataMeta_DoubleVal, DataMeta_StringVal
-    };
-    return values;
+inline const DataMeta (&EnumValuesDataMeta())[4]
+{
+  static const DataMeta values[] = {DataMeta_NONE, DataMeta_LongVal, DataMeta_DoubleVal, DataMeta_StringVal};
+  return values;
 }
 
-inline const char *const *EnumNamesDataMeta() {
-    static const char *const names[5] = {
-        "NONE", "LongVal", "DoubleVal", "StringVal", nullptr
-    };
-    return names;
+inline const char *const *EnumNamesDataMeta()
+{
+  static const char *const names[5] = {"NONE", "LongVal", "DoubleVal", "StringVal", nullptr};
+  return names;
 }
 
-inline const char *EnumNameDataMeta(DataMeta e) {
-    if (::flatbuffers::IsOutRange(e, DataMeta_NONE, DataMeta_StringVal)) {
-        return "";
-    }
-    const size_t index = static_cast<size_t>(e);
-    return EnumNamesDataMeta()[index];
+inline const char *EnumNameDataMeta(DataMeta e)
+{
+  if (::flatbuffers::IsOutRange(e, DataMeta_NONE, DataMeta_StringVal)) {
+    return "";
+  }
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesDataMeta()[index];
 }
 
-template<typename T>
-struct DataMetaTraits {
-    static const DataMeta enum_value = DataMeta_NONE;
+template <typename T>
+struct DataMetaTraits
+{
+  static const DataMeta enum_value = DataMeta_NONE;
 };
 
-template<>
-struct DataMetaTraits<loft::LongVal> {
-    static const DataMeta enum_value = DataMeta_LongVal;
+template <>
+struct DataMetaTraits<loft::LongVal>
+{
+  static const DataMeta enum_value = DataMeta_LongVal;
 };
 
-template<>
-struct DataMetaTraits<loft::DoubleVal> {
-    static const DataMeta enum_value = DataMeta_DoubleVal;
+template <>
+struct DataMetaTraits<loft::DoubleVal>
+{
+  static const DataMeta enum_value = DataMeta_DoubleVal;
 };
 
-template<>
-struct DataMetaTraits<loft::StringVal> {
-    static const DataMeta enum_value = DataMeta_StringVal;
+template <>
+struct DataMetaTraits<loft::StringVal>
+{
+  static const DataMeta enum_value = DataMeta_StringVal;
 };
 
-bool VerifyDataMeta(
-    ::flatbuffers::Verifier &verifier, const void *obj, DataMeta type
-);
-bool VerifyDataMetaVector(
-    ::flatbuffers::Verifier &verifier,
-    const ::flatbuffers::Vector<::flatbuffers::Offset<void>> *values,
-    const ::flatbuffers::Vector<uint8_t> *types
-);
+bool VerifyDataMeta(::flatbuffers::Verifier &verifier, const void *obj, DataMeta type);
+bool VerifyDataMetaVector(::flatbuffers::Verifier            &verifier,
+    const ::flatbuffers::Vector<::flatbuffers::Offset<void>> *values, const ::flatbuffers::Vector<uint8_t> *types);
 
-struct FieldMeta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-    typedef FieldMetaBuilder Builder;
+struct FieldMeta FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
+{
+  typedef FieldMetaBuilder Builder;
 
-    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-        VT_DATA_TYPE = 4,
-        VT_LENGTH = 6,
-        VT_PRECISION = 8,
-        VT_IS_UNSIGNED = 10,
-        VT_NULLABLE = 12,
-        VT_CSNAME = 14
-    };
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE
+  {
+    VT_DATA_TYPE   = 4,
+    VT_LENGTH      = 6,
+    VT_PRECISION   = 8,
+    VT_IS_UNSIGNED = 10,
+    VT_NULLABLE    = 12,
+    VT_CSNAME      = 14
+  };
 
-    const ::flatbuffers::String *data_type() const {
-        return GetPointer<const ::flatbuffers::String *>(VT_DATA_TYPE);
-    }
+  const ::flatbuffers::String *data_type() const { return GetPointer<const ::flatbuffers::String *>(VT_DATA_TYPE); }
 
-    int32_t length() const { return GetField<int32_t>(VT_LENGTH, 0); }
+  int32_t length() const { return GetField<int32_t>(VT_LENGTH, 0); }
 
-    int32_t precision() const { return GetField<int32_t>(VT_PRECISION, 0); }
+  int32_t precision() const { return GetField<int32_t>(VT_PRECISION, 0); }
 
-    bool is_unsigned() const {
-        return GetField<uint8_t>(VT_IS_UNSIGNED, 0) != 0;
-    }
+  bool is_unsigned() const { return GetField<uint8_t>(VT_IS_UNSIGNED, 0) != 0; }
 
-    bool nullable() const { return GetField<uint8_t>(VT_NULLABLE, 0) != 0; }
+  bool nullable() const { return GetField<uint8_t>(VT_NULLABLE, 0) != 0; }
 
-    const ::flatbuffers::String *csname() const {
-        return GetPointer<const ::flatbuffers::String *>(VT_CSNAME);
-    }
+  const ::flatbuffers::String *csname() const { return GetPointer<const ::flatbuffers::String *>(VT_CSNAME); }
 
-    bool Verify(::flatbuffers::Verifier &verifier) const {
-        return VerifyTableStart(verifier)
-               && VerifyOffset(verifier, VT_DATA_TYPE)
-               && verifier.VerifyString(data_type())
-               && VerifyField<int32_t>(verifier, VT_LENGTH, 4)
-               && VerifyField<int32_t>(verifier, VT_PRECISION, 4)
-               && VerifyField<uint8_t>(verifier, VT_IS_UNSIGNED, 1)
-               && VerifyField<uint8_t>(verifier, VT_NULLABLE, 1)
-               && VerifyOffset(verifier, VT_CSNAME)
-               && verifier.VerifyString(csname()) && verifier.EndTable();
-    }
+  bool Verify(::flatbuffers::Verifier &verifier) const
+  {
+    return VerifyTableStart(verifier) && VerifyOffset(verifier, VT_DATA_TYPE) && verifier.VerifyString(data_type()) &&
+           VerifyField<int32_t>(verifier, VT_LENGTH, 4) && VerifyField<int32_t>(verifier, VT_PRECISION, 4) &&
+           VerifyField<uint8_t>(verifier, VT_IS_UNSIGNED, 1) && VerifyField<uint8_t>(verifier, VT_NULLABLE, 1) &&
+           VerifyOffset(verifier, VT_CSNAME) && verifier.VerifyString(csname()) && verifier.EndTable();
+  }
 };
 
-struct FieldMetaBuilder {
-    typedef FieldMeta Table;
-    ::flatbuffers::FlatBufferBuilder &fbb_;
-    ::flatbuffers::uoffset_t start_;
+struct FieldMetaBuilder
+{
+  typedef FieldMeta                 Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t          start_;
 
-    void add_data_type(::flatbuffers::Offset<::flatbuffers::String> data_type) {
-        fbb_.AddOffset(FieldMeta::VT_DATA_TYPE, data_type);
-    }
+  void add_data_type(::flatbuffers::Offset<::flatbuffers::String> data_type)
+  {
+    fbb_.AddOffset(FieldMeta::VT_DATA_TYPE, data_type);
+  }
 
-    void add_length(int32_t length) {
-        fbb_.AddElement<int32_t>(FieldMeta::VT_LENGTH, length, 0);
-    }
+  void add_length(int32_t length) { fbb_.AddElement<int32_t>(FieldMeta::VT_LENGTH, length, 0); }
 
-    void add_precision(int32_t precision) {
-        fbb_.AddElement<int32_t>(FieldMeta::VT_PRECISION, precision, 0);
-    }
+  void add_precision(int32_t precision) { fbb_.AddElement<int32_t>(FieldMeta::VT_PRECISION, precision, 0); }
 
-    void add_is_unsigned(bool is_unsigned) {
-        fbb_.AddElement<uint8_t>(
-            FieldMeta::VT_IS_UNSIGNED, static_cast<uint8_t>(is_unsigned), 0
-        );
-    }
+  void add_is_unsigned(bool is_unsigned)
+  {
+    fbb_.AddElement<uint8_t>(FieldMeta::VT_IS_UNSIGNED, static_cast<uint8_t>(is_unsigned), 0);
+  }
 
-    void add_nullable(bool nullable) {
-        fbb_.AddElement<uint8_t>(
-            FieldMeta::VT_NULLABLE, static_cast<uint8_t>(nullable), 0
-        );
-    }
+  void add_nullable(bool nullable)
+  {
+    fbb_.AddElement<uint8_t>(FieldMeta::VT_NULLABLE, static_cast<uint8_t>(nullable), 0);
+  }
 
-    void add_csname(::flatbuffers::Offset<::flatbuffers::String> csname) {
-        fbb_.AddOffset(FieldMeta::VT_CSNAME, csname);
-    }
+  void add_csname(::flatbuffers::Offset<::flatbuffers::String> csname) { fbb_.AddOffset(FieldMeta::VT_CSNAME, csname); }
 
-    explicit FieldMetaBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-        start_ = fbb_.StartTable();
-    }
+  explicit FieldMetaBuilder(::flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) { start_ = fbb_.StartTable(); }
 
-    ::flatbuffers::Offset<FieldMeta> Finish() {
-        const auto end = fbb_.EndTable(start_);
-        auto o = ::flatbuffers::Offset<FieldMeta>(end);
-        return o;
-    }
+  ::flatbuffers::Offset<FieldMeta> Finish()
+  {
+    const auto end = fbb_.EndTable(start_);
+    auto       o   = ::flatbuffers::Offset<FieldMeta>(end);
+    return o;
+  }
 };
 
-inline ::flatbuffers::Offset<FieldMeta> CreateFieldMeta(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    ::flatbuffers::Offset<::flatbuffers::String> data_type = 0,
-    int32_t length = 0,
-    int32_t precision = 0,
-    bool is_unsigned = false,
-    bool nullable = false,
-    ::flatbuffers::Offset<::flatbuffers::String> csname = 0
-) {
-    FieldMetaBuilder builder_(_fbb);
-    builder_.add_csname(csname);
-    builder_.add_precision(precision);
-    builder_.add_length(length);
-    builder_.add_data_type(data_type);
-    builder_.add_nullable(nullable);
-    builder_.add_is_unsigned(is_unsigned);
-    return builder_.Finish();
+inline ::flatbuffers::Offset<FieldMeta> CreateFieldMeta(::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> data_type = 0, int32_t length = 0, int32_t precision = 0,
+    bool is_unsigned = false, bool nullable = false, ::flatbuffers::Offset<::flatbuffers::String> csname = 0)
+{
+  FieldMetaBuilder builder_(_fbb);
+  builder_.add_csname(csname);
+  builder_.add_precision(precision);
+  builder_.add_length(length);
+  builder_.add_data_type(data_type);
+  builder_.add_nullable(nullable);
+  builder_.add_is_unsigned(is_unsigned);
+  return builder_.Finish();
 }
 
-inline ::flatbuffers::Offset<FieldMeta> CreateFieldMetaDirect(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    const char *data_type = nullptr,
-    int32_t length = 0,
-    int32_t precision = 0,
-    bool is_unsigned = false,
-    bool nullable = false,
-    const char *csname = nullptr
-) {
-    auto data_type__ = data_type ? _fbb.CreateString(data_type) : 0;
-    auto csname__ = csname ? _fbb.CreateString(csname) : 0;
-    return loft::CreateFieldMeta(
-        _fbb, data_type__, length, precision, is_unsigned, nullable, csname__
-    );
+inline ::flatbuffers::Offset<FieldMeta> CreateFieldMetaDirect(::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *data_type = nullptr, int32_t length = 0, int32_t precision = 0, bool is_unsigned = false,
+    bool nullable = false, const char *csname = nullptr)
+{
+  auto data_type__ = data_type ? _fbb.CreateString(data_type) : 0;
+  auto csname__    = csname ? _fbb.CreateString(csname) : 0;
+  return loft::CreateFieldMeta(_fbb, data_type__, length, precision, is_unsigned, nullable, csname__);
 }
 
-struct Field FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-    typedef FieldBuilder Builder;
+struct Field FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
+{
+  typedef FieldBuilder Builder;
 
-    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-        VT_NAME = 4,
-        VT_META = 6
-    };
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE
+  {
+    VT_NAME = 4,
+    VT_META = 6
+  };
 
-    const ::flatbuffers::String *name() const {
-        return GetPointer<const ::flatbuffers::String *>(VT_NAME);
-    }
+  const ::flatbuffers::String *name() const { return GetPointer<const ::flatbuffers::String *>(VT_NAME); }
 
-    const loft::FieldMeta *meta() const {
-        return GetPointer<const loft::FieldMeta *>(VT_META);
-    }
+  const loft::FieldMeta *meta() const { return GetPointer<const loft::FieldMeta *>(VT_META); }
 
-    bool Verify(::flatbuffers::Verifier &verifier) const {
-        return VerifyTableStart(verifier) && VerifyOffset(verifier, VT_NAME)
-               && verifier.VerifyString(name())
-               && VerifyOffset(verifier, VT_META)
-               && verifier.VerifyTable(meta()) && verifier.EndTable();
-    }
+  bool Verify(::flatbuffers::Verifier &verifier) const
+  {
+    return VerifyTableStart(verifier) && VerifyOffset(verifier, VT_NAME) && verifier.VerifyString(name()) &&
+           VerifyOffset(verifier, VT_META) && verifier.VerifyTable(meta()) && verifier.EndTable();
+  }
 };
 
-struct FieldBuilder {
-    typedef Field Table;
-    ::flatbuffers::FlatBufferBuilder &fbb_;
-    ::flatbuffers::uoffset_t start_;
+struct FieldBuilder
+{
+  typedef Field                     Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t          start_;
 
-    void add_name(::flatbuffers::Offset<::flatbuffers::String> name) {
-        fbb_.AddOffset(Field::VT_NAME, name);
-    }
+  void add_name(::flatbuffers::Offset<::flatbuffers::String> name) { fbb_.AddOffset(Field::VT_NAME, name); }
 
-    void add_meta(::flatbuffers::Offset<loft::FieldMeta> meta) {
-        fbb_.AddOffset(Field::VT_META, meta);
-    }
+  void add_meta(::flatbuffers::Offset<loft::FieldMeta> meta) { fbb_.AddOffset(Field::VT_META, meta); }
 
-    explicit FieldBuilder(::flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) {
-        start_ = fbb_.StartTable();
-    }
+  explicit FieldBuilder(::flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) { start_ = fbb_.StartTable(); }
 
-    ::flatbuffers::Offset<Field> Finish() {
-        const auto end = fbb_.EndTable(start_);
-        auto o = ::flatbuffers::Offset<Field>(end);
-        return o;
-    }
+  ::flatbuffers::Offset<Field> Finish()
+  {
+    const auto end = fbb_.EndTable(start_);
+    auto       o   = ::flatbuffers::Offset<Field>(end);
+    return o;
+  }
 };
 
-inline ::flatbuffers::Offset<Field> CreateField(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    ::flatbuffers::Offset<::flatbuffers::String> name = 0,
-    ::flatbuffers::Offset<loft::FieldMeta> meta = 0
-) {
-    FieldBuilder builder_(_fbb);
-    builder_.add_meta(meta);
-    builder_.add_name(name);
-    return builder_.Finish();
+inline ::flatbuffers::Offset<Field> CreateField(::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> name = 0, ::flatbuffers::Offset<loft::FieldMeta> meta = 0)
+{
+  FieldBuilder builder_(_fbb);
+  builder_.add_meta(meta);
+  builder_.add_name(name);
+  return builder_.Finish();
 }
 
 inline ::flatbuffers::Offset<Field> CreateFieldDirect(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    const char *name = nullptr,
-    ::flatbuffers::Offset<loft::FieldMeta> meta = 0
-) {
-    auto name__ = name ? _fbb.CreateString(name) : 0;
-    return loft::CreateField(_fbb, name__, meta);
+    ::flatbuffers::FlatBufferBuilder &_fbb, const char *name = nullptr, ::flatbuffers::Offset<loft::FieldMeta> meta = 0)
+{
+  auto name__ = name ? _fbb.CreateString(name) : 0;
+  return loft::CreateField(_fbb, name__, meta);
 }
 
-struct LongVal FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-    typedef LongValBuilder Builder;
+struct LongVal FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
+{
+  typedef LongValBuilder Builder;
 
-    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-        VT_VALUE = 4
-    };
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE
+  {
+    VT_VALUE = 4
+  };
 
-    int64_t value() const { return GetField<int64_t>(VT_VALUE, 0); }
+  int64_t value() const { return GetField<int64_t>(VT_VALUE, 0); }
 
-    bool Verify(::flatbuffers::Verifier &verifier) const {
-        return VerifyTableStart(verifier)
-               && VerifyField<int64_t>(verifier, VT_VALUE, 8)
-               && verifier.EndTable();
-    }
+  bool Verify(::flatbuffers::Verifier &verifier) const
+  {
+    return VerifyTableStart(verifier) && VerifyField<int64_t>(verifier, VT_VALUE, 8) && verifier.EndTable();
+  }
 };
 
-struct LongValBuilder {
-    typedef LongVal Table;
-    ::flatbuffers::FlatBufferBuilder &fbb_;
-    ::flatbuffers::uoffset_t start_;
+struct LongValBuilder
+{
+  typedef LongVal                   Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t          start_;
 
-    void add_value(int64_t value) {
-        fbb_.AddElement<int64_t>(LongVal::VT_VALUE, value, 0);
-    }
+  void add_value(int64_t value) { fbb_.AddElement<int64_t>(LongVal::VT_VALUE, value, 0); }
 
-    explicit LongValBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-        start_ = fbb_.StartTable();
-    }
+  explicit LongValBuilder(::flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) { start_ = fbb_.StartTable(); }
 
-    ::flatbuffers::Offset<LongVal> Finish() {
-        const auto end = fbb_.EndTable(start_);
-        auto o = ::flatbuffers::Offset<LongVal>(end);
-        return o;
-    }
+  ::flatbuffers::Offset<LongVal> Finish()
+  {
+    const auto end = fbb_.EndTable(start_);
+    auto       o   = ::flatbuffers::Offset<LongVal>(end);
+    return o;
+  }
 };
 
-inline ::flatbuffers::Offset<LongVal>
-CreateLongVal(::flatbuffers::FlatBufferBuilder &_fbb, int64_t value = 0) {
-    LongValBuilder builder_(_fbb);
-    builder_.add_value(value);
-    return builder_.Finish();
+inline ::flatbuffers::Offset<LongVal> CreateLongVal(::flatbuffers::FlatBufferBuilder &_fbb, int64_t value = 0)
+{
+  LongValBuilder builder_(_fbb);
+  builder_.add_value(value);
+  return builder_.Finish();
 }
 
-struct DoubleVal FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-    typedef DoubleValBuilder Builder;
+struct DoubleVal FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
+{
+  typedef DoubleValBuilder Builder;
 
-    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-        VT_VALUE = 4
-    };
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE
+  {
+    VT_VALUE = 4
+  };
 
-    double value() const { return GetField<double>(VT_VALUE, 0.0); }
+  double value() const { return GetField<double>(VT_VALUE, 0.0); }
 
-    bool Verify(::flatbuffers::Verifier &verifier) const {
-        return VerifyTableStart(verifier)
-               && VerifyField<double>(verifier, VT_VALUE, 8)
-               && verifier.EndTable();
-    }
+  bool Verify(::flatbuffers::Verifier &verifier) const
+  {
+    return VerifyTableStart(verifier) && VerifyField<double>(verifier, VT_VALUE, 8) && verifier.EndTable();
+  }
 };
 
-struct DoubleValBuilder {
-    typedef DoubleVal Table;
-    ::flatbuffers::FlatBufferBuilder &fbb_;
-    ::flatbuffers::uoffset_t start_;
+struct DoubleValBuilder
+{
+  typedef DoubleVal                 Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t          start_;
 
-    void add_value(double value) {
-        fbb_.AddElement<double>(DoubleVal::VT_VALUE, value, 0.0);
-    }
+  void add_value(double value) { fbb_.AddElement<double>(DoubleVal::VT_VALUE, value, 0.0); }
 
-    explicit DoubleValBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-        start_ = fbb_.StartTable();
-    }
+  explicit DoubleValBuilder(::flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) { start_ = fbb_.StartTable(); }
 
-    ::flatbuffers::Offset<DoubleVal> Finish() {
-        const auto end = fbb_.EndTable(start_);
-        auto o = ::flatbuffers::Offset<DoubleVal>(end);
-        return o;
-    }
+  ::flatbuffers::Offset<DoubleVal> Finish()
+  {
+    const auto end = fbb_.EndTable(start_);
+    auto       o   = ::flatbuffers::Offset<DoubleVal>(end);
+    return o;
+  }
 };
 
-inline ::flatbuffers::Offset<DoubleVal>
-CreateDoubleVal(::flatbuffers::FlatBufferBuilder &_fbb, double value = 0.0) {
-    DoubleValBuilder builder_(_fbb);
-    builder_.add_value(value);
-    return builder_.Finish();
+inline ::flatbuffers::Offset<DoubleVal> CreateDoubleVal(::flatbuffers::FlatBufferBuilder &_fbb, double value = 0.0)
+{
+  DoubleValBuilder builder_(_fbb);
+  builder_.add_value(value);
+  return builder_.Finish();
 }
 
-struct StringVal FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-    typedef StringValBuilder Builder;
+struct StringVal FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
+{
+  typedef StringValBuilder Builder;
 
-    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-        VT_VALUE = 4
-    };
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE
+  {
+    VT_VALUE = 4
+  };
 
-    const ::flatbuffers::String *value() const {
-        return GetPointer<const ::flatbuffers::String *>(VT_VALUE);
-    }
+  const ::flatbuffers::String *value() const { return GetPointer<const ::flatbuffers::String *>(VT_VALUE); }
 
-    bool Verify(::flatbuffers::Verifier &verifier) const {
-        return VerifyTableStart(verifier) && VerifyOffset(verifier, VT_VALUE)
-               && verifier.VerifyString(value()) && verifier.EndTable();
-    }
+  bool Verify(::flatbuffers::Verifier &verifier) const
+  {
+    return VerifyTableStart(verifier) && VerifyOffset(verifier, VT_VALUE) && verifier.VerifyString(value()) &&
+           verifier.EndTable();
+  }
 };
 
-struct StringValBuilder {
-    typedef StringVal Table;
-    ::flatbuffers::FlatBufferBuilder &fbb_;
-    ::flatbuffers::uoffset_t start_;
+struct StringValBuilder
+{
+  typedef StringVal                 Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t          start_;
 
-    void add_value(::flatbuffers::Offset<::flatbuffers::String> value) {
-        fbb_.AddOffset(StringVal::VT_VALUE, value);
-    }
+  void add_value(::flatbuffers::Offset<::flatbuffers::String> value) { fbb_.AddOffset(StringVal::VT_VALUE, value); }
 
-    explicit StringValBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-        start_ = fbb_.StartTable();
-    }
+  explicit StringValBuilder(::flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) { start_ = fbb_.StartTable(); }
 
-    ::flatbuffers::Offset<StringVal> Finish() {
-        const auto end = fbb_.EndTable(start_);
-        auto o = ::flatbuffers::Offset<StringVal>(end);
-        return o;
-    }
+  ::flatbuffers::Offset<StringVal> Finish()
+  {
+    const auto end = fbb_.EndTable(start_);
+    auto       o   = ::flatbuffers::Offset<StringVal>(end);
+    return o;
+  }
 };
 
 inline ::flatbuffers::Offset<StringVal> CreateStringVal(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    ::flatbuffers::Offset<::flatbuffers::String> value = 0
-) {
-    StringValBuilder builder_(_fbb);
-    builder_.add_value(value);
-    return builder_.Finish();
+    ::flatbuffers::FlatBufferBuilder &_fbb, ::flatbuffers::Offset<::flatbuffers::String> value = 0)
+{
+  StringValBuilder builder_(_fbb);
+  builder_.add_value(value);
+  return builder_.Finish();
 }
 
 inline ::flatbuffers::Offset<StringVal> CreateStringValDirect(
-    ::flatbuffers::FlatBufferBuilder &_fbb, const char *value = nullptr
-) {
-    auto value__ = value ? _fbb.CreateString(value) : 0;
-    return loft::CreateStringVal(_fbb, value__);
+    ::flatbuffers::FlatBufferBuilder &_fbb, const char *value = nullptr)
+{
+  auto value__ = value ? _fbb.CreateString(value) : 0;
+  return loft::CreateStringVal(_fbb, value__);
 }
 
-struct kvPair FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-    typedef kvPairBuilder Builder;
+struct kvPair FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
+{
+  typedef kvPairBuilder Builder;
 
-    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-        VT_KEY = 4,
-        VT_VALUE_TYPE = 6,
-        VT_VALUE = 8
-    };
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE
+  {
+    VT_KEY        = 4,
+    VT_VALUE_TYPE = 6,
+    VT_VALUE      = 8
+  };
 
-    const ::flatbuffers::String *key() const {
-        return GetPointer<const ::flatbuffers::String *>(VT_KEY);
-    }
+  const ::flatbuffers::String *key() const { return GetPointer<const ::flatbuffers::String *>(VT_KEY); }
 
-    loft::DataMeta value_type() const {
-        return static_cast<loft::DataMeta>(GetField<uint8_t>(VT_VALUE_TYPE, 0));
-    }
+  loft::DataMeta value_type() const { return static_cast<loft::DataMeta>(GetField<uint8_t>(VT_VALUE_TYPE, 0)); }
 
-    const void *value() const { return GetPointer<const void *>(VT_VALUE); }
+  const void *value() const { return GetPointer<const void *>(VT_VALUE); }
 
-    template<typename T>
-    const T *value_as() const;
+  template <typename T>
+  const T *value_as() const;
 
-    const loft::LongVal *value_as_LongVal() const {
-        return value_type() == loft::DataMeta_LongVal
-                   ? static_cast<const loft::LongVal *>(value())
-                   : nullptr;
-    }
+  const loft::LongVal *value_as_LongVal() const
+  {
+    return value_type() == loft::DataMeta_LongVal ? static_cast<const loft::LongVal *>(value()) : nullptr;
+  }
 
-    const loft::DoubleVal *value_as_DoubleVal() const {
-        return value_type() == loft::DataMeta_DoubleVal
-                   ? static_cast<const loft::DoubleVal *>(value())
-                   : nullptr;
-    }
+  const loft::DoubleVal *value_as_DoubleVal() const
+  {
+    return value_type() == loft::DataMeta_DoubleVal ? static_cast<const loft::DoubleVal *>(value()) : nullptr;
+  }
 
-    const loft::StringVal *value_as_StringVal() const {
-        return value_type() == loft::DataMeta_StringVal
-                   ? static_cast<const loft::StringVal *>(value())
-                   : nullptr;
-    }
+  const loft::StringVal *value_as_StringVal() const
+  {
+    return value_type() == loft::DataMeta_StringVal ? static_cast<const loft::StringVal *>(value()) : nullptr;
+  }
 
-    bool Verify(::flatbuffers::Verifier &verifier) const {
-        return VerifyTableStart(verifier) && VerifyOffset(verifier, VT_KEY)
-               && verifier.VerifyString(key())
-               && VerifyField<uint8_t>(verifier, VT_VALUE_TYPE, 1)
-               && VerifyOffset(verifier, VT_VALUE)
-               && VerifyDataMeta(verifier, value(), value_type())
-               && verifier.EndTable();
-    }
+  bool Verify(::flatbuffers::Verifier &verifier) const
+  {
+    return VerifyTableStart(verifier) && VerifyOffset(verifier, VT_KEY) && verifier.VerifyString(key()) &&
+           VerifyField<uint8_t>(verifier, VT_VALUE_TYPE, 1) && VerifyOffset(verifier, VT_VALUE) &&
+           VerifyDataMeta(verifier, value(), value_type()) && verifier.EndTable();
+  }
 };
 
-template<>
-inline const loft::LongVal *kvPair::value_as<loft::LongVal>() const {
-    return value_as_LongVal();
+template <>
+inline const loft::LongVal *kvPair::value_as<loft::LongVal>() const
+{
+  return value_as_LongVal();
 }
 
-template<>
-inline const loft::DoubleVal *kvPair::value_as<loft::DoubleVal>() const {
-    return value_as_DoubleVal();
+template <>
+inline const loft::DoubleVal *kvPair::value_as<loft::DoubleVal>() const
+{
+  return value_as_DoubleVal();
 }
 
-template<>
-inline const loft::StringVal *kvPair::value_as<loft::StringVal>() const {
-    return value_as_StringVal();
+template <>
+inline const loft::StringVal *kvPair::value_as<loft::StringVal>() const
+{
+  return value_as_StringVal();
 }
 
-struct kvPairBuilder {
-    typedef kvPair Table;
-    ::flatbuffers::FlatBufferBuilder &fbb_;
-    ::flatbuffers::uoffset_t start_;
+struct kvPairBuilder
+{
+  typedef kvPair                    Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t          start_;
 
-    void add_key(::flatbuffers::Offset<::flatbuffers::String> key) {
-        fbb_.AddOffset(kvPair::VT_KEY, key);
-    }
+  void add_key(::flatbuffers::Offset<::flatbuffers::String> key) { fbb_.AddOffset(kvPair::VT_KEY, key); }
 
-    void add_value_type(loft::DataMeta value_type) {
-        fbb_.AddElement<uint8_t>(
-            kvPair::VT_VALUE_TYPE, static_cast<uint8_t>(value_type), 0
-        );
-    }
+  void add_value_type(loft::DataMeta value_type)
+  {
+    fbb_.AddElement<uint8_t>(kvPair::VT_VALUE_TYPE, static_cast<uint8_t>(value_type), 0);
+  }
 
-    void add_value(::flatbuffers::Offset<void> value) {
-        fbb_.AddOffset(kvPair::VT_VALUE, value);
-    }
+  void add_value(::flatbuffers::Offset<void> value) { fbb_.AddOffset(kvPair::VT_VALUE, value); }
 
-    explicit kvPairBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-        start_ = fbb_.StartTable();
-    }
+  explicit kvPairBuilder(::flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) { start_ = fbb_.StartTable(); }
 
-    ::flatbuffers::Offset<kvPair> Finish() {
-        const auto end = fbb_.EndTable(start_);
-        auto o = ::flatbuffers::Offset<kvPair>(end);
-        return o;
-    }
+  ::flatbuffers::Offset<kvPair> Finish()
+  {
+    const auto end = fbb_.EndTable(start_);
+    auto       o   = ::flatbuffers::Offset<kvPair>(end);
+    return o;
+  }
 };
 
-inline ::flatbuffers::Offset<kvPair> CreatekvPair(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    ::flatbuffers::Offset<::flatbuffers::String> key = 0,
-    loft::DataMeta value_type = loft::DataMeta_NONE,
-    ::flatbuffers::Offset<void> value = 0
-) {
-    kvPairBuilder builder_(_fbb);
-    builder_.add_value(value);
-    builder_.add_key(key);
-    builder_.add_value_type(value_type);
-    return builder_.Finish();
+inline ::flatbuffers::Offset<kvPair> CreatekvPair(::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> key = 0, loft::DataMeta value_type = loft::DataMeta_NONE,
+    ::flatbuffers::Offset<void> value = 0)
+{
+  kvPairBuilder builder_(_fbb);
+  builder_.add_value(value);
+  builder_.add_key(key);
+  builder_.add_value_type(value_type);
+  return builder_.Finish();
 }
 
-inline ::flatbuffers::Offset<kvPair> CreatekvPairDirect(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    const char *key = nullptr,
-    loft::DataMeta value_type = loft::DataMeta_NONE,
-    ::flatbuffers::Offset<void> value = 0
-) {
-    auto key__ = key ? _fbb.CreateString(key) : 0;
-    return loft::CreatekvPair(_fbb, key__, value_type, value);
+inline ::flatbuffers::Offset<kvPair> CreatekvPairDirect(::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *key = nullptr, loft::DataMeta value_type = loft::DataMeta_NONE, ::flatbuffers::Offset<void> value = 0)
+{
+  auto key__ = key ? _fbb.CreateString(key) : 0;
+  return loft::CreatekvPair(_fbb, key__, value_type, value);
 }
 
-struct DML FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-    typedef DMLBuilder Builder;
+struct DML FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
+{
+  typedef DMLBuilder Builder;
 
-    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-        VT_CHECK_POINT = 4,
-        VT_DB_NAME = 6,
-        VT_DN = 8,
-        VT_FIELDS = 10,
-        VT_KEYS = 12,
-        VT_LAST_COMMIT = 14,
-        VT_LSN = 16,
-        VT_MSG_TIME = 18,
-        VT_NEW_DATA = 20,
-        VT_OLD_DATA = 22,
-        VT_OP_TYPE = 24,
-        VT_SCN = 26,
-        VT_SEQ = 28,
-        VT_TABLE_ = 30,
-        VT_TX_SEQ = 32,
-        VT_TX_TIME = 34
-    };
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE
+  {
+    VT_CHECK_POINT = 4,
+    VT_DB_NAME     = 6,
+    VT_DN          = 8,
+    VT_FIELDS      = 10,
+    VT_KEYS        = 12,
+    VT_LAST_COMMIT = 14,
+    VT_LSN         = 16,
+    VT_MSG_TIME    = 18,
+    VT_NEW_DATA    = 20,
+    VT_OLD_DATA    = 22,
+    VT_OP_TYPE     = 24,
+    VT_SCN         = 26,
+    VT_SEQ         = 28,
+    VT_TABLE_      = 30,
+    VT_TX_SEQ      = 32,
+    VT_TX_TIME     = 34
+  };
 
-    const ::flatbuffers::String *check_point() const {
-        return GetPointer<const ::flatbuffers::String *>(VT_CHECK_POINT);
-    }
+  const ::flatbuffers::String *check_point() const { return GetPointer<const ::flatbuffers::String *>(VT_CHECK_POINT); }
 
-    const ::flatbuffers::String *db_name() const {
-        return GetPointer<const ::flatbuffers::String *>(VT_DB_NAME);
-    }
+  const ::flatbuffers::String *db_name() const { return GetPointer<const ::flatbuffers::String *>(VT_DB_NAME); }
 
-    int16_t dn() const { return GetField<int16_t>(VT_DN, 0); }
+  int16_t dn() const { return GetField<int16_t>(VT_DN, 0); }
 
-    const ::flatbuffers::Vector<::flatbuffers::Offset<loft::Field>> *
-    fields() const {
-        return GetPointer<
-            const ::flatbuffers::Vector<::flatbuffers::Offset<loft::Field>> *>(
-            VT_FIELDS
-        );
-    }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<loft::Field>> *fields() const
+  {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<loft::Field>> *>(VT_FIELDS);
+  }
 
-    const ::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>> *
-    keys() const {
-        return GetPointer<
-            const ::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>> *>(
-            VT_KEYS
-        );
-    }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>> *keys() const
+  {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>> *>(VT_KEYS);
+  }
 
-    int64_t last_commit() const { return GetField<int64_t>(VT_LAST_COMMIT, 0); }
+  int64_t last_commit() const { return GetField<int64_t>(VT_LAST_COMMIT, 0); }
 
-    int64_t lsn() const { return GetField<int64_t>(VT_LSN, 0); }
+  int64_t lsn() const { return GetField<int64_t>(VT_LSN, 0); }
 
-    const ::flatbuffers::String *msg_time() const {
-        return GetPointer<const ::flatbuffers::String *>(VT_MSG_TIME);
-    }
+  const ::flatbuffers::String *msg_time() const { return GetPointer<const ::flatbuffers::String *>(VT_MSG_TIME); }
 
-    const ::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>> *
-    new_data() const {
-        return GetPointer<
-            const ::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>> *>(
-            VT_NEW_DATA
-        );
-    }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>> *new_data() const
+  {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>> *>(VT_NEW_DATA);
+  }
 
-    int32_t old_data() const { return GetField<int32_t>(VT_OLD_DATA, 0); }
+  int32_t old_data() const { return GetField<int32_t>(VT_OLD_DATA, 0); }
 
-    const ::flatbuffers::String *op_type() const {
-        return GetPointer<const ::flatbuffers::String *>(VT_OP_TYPE);
-    }
+  const ::flatbuffers::String *op_type() const { return GetPointer<const ::flatbuffers::String *>(VT_OP_TYPE); }
 
-    int64_t scn() const { return GetField<int64_t>(VT_SCN, 0); }
+  int64_t scn() const { return GetField<int64_t>(VT_SCN, 0); }
 
-    int64_t seq() const { return GetField<int64_t>(VT_SEQ, 0); }
+  int64_t seq() const { return GetField<int64_t>(VT_SEQ, 0); }
 
-    const ::flatbuffers::String *table_() const {
-        return GetPointer<const ::flatbuffers::String *>(VT_TABLE_);
-    }
+  const ::flatbuffers::String *table_() const { return GetPointer<const ::flatbuffers::String *>(VT_TABLE_); }
 
-    int64_t tx_seq() const { return GetField<int64_t>(VT_TX_SEQ, 0); }
+  int64_t tx_seq() const { return GetField<int64_t>(VT_TX_SEQ, 0); }
 
-    const ::flatbuffers::String *tx_time() const {
-        return GetPointer<const ::flatbuffers::String *>(VT_TX_TIME);
-    }
+  const ::flatbuffers::String *tx_time() const { return GetPointer<const ::flatbuffers::String *>(VT_TX_TIME); }
 
-    bool Verify(::flatbuffers::Verifier &verifier) const {
-        return VerifyTableStart(verifier)
-               && VerifyOffset(verifier, VT_CHECK_POINT)
-               && verifier.VerifyString(check_point())
-               && VerifyOffset(verifier, VT_DB_NAME)
-               && verifier.VerifyString(db_name())
-               && VerifyField<int16_t>(verifier, VT_DN, 2)
-               && VerifyOffset(verifier, VT_FIELDS)
-               && verifier.VerifyVector(fields())
-               && verifier.VerifyVectorOfTables(fields())
-               && VerifyOffset(verifier, VT_KEYS)
-               && verifier.VerifyVector(keys())
-               && verifier.VerifyVectorOfTables(keys())
-               && VerifyField<int64_t>(verifier, VT_LAST_COMMIT, 8)
-               && VerifyField<int64_t>(verifier, VT_LSN, 8)
-               && VerifyOffset(verifier, VT_MSG_TIME)
-               && verifier.VerifyString(msg_time())
-               && VerifyOffset(verifier, VT_NEW_DATA)
-               && verifier.VerifyVector(new_data())
-               && verifier.VerifyVectorOfTables(new_data())
-               && VerifyField<int32_t>(verifier, VT_OLD_DATA, 4)
-               && VerifyOffset(verifier, VT_OP_TYPE)
-               && verifier.VerifyString(op_type())
-               && VerifyField<int64_t>(verifier, VT_SCN, 8)
-               && VerifyField<int64_t>(verifier, VT_SEQ, 8)
-               && VerifyOffset(verifier, VT_TABLE_)
-               && verifier.VerifyString(table_())
-               && VerifyField<int64_t>(verifier, VT_TX_SEQ, 8)
-               && VerifyOffset(verifier, VT_TX_TIME)
-               && verifier.VerifyString(tx_time()) && verifier.EndTable();
-    }
+  bool Verify(::flatbuffers::Verifier &verifier) const
+  {
+    return VerifyTableStart(verifier) && VerifyOffset(verifier, VT_CHECK_POINT) &&
+           verifier.VerifyString(check_point()) && VerifyOffset(verifier, VT_DB_NAME) &&
+           verifier.VerifyString(db_name()) && VerifyField<int16_t>(verifier, VT_DN, 2) &&
+           VerifyOffset(verifier, VT_FIELDS) && verifier.VerifyVector(fields()) &&
+           verifier.VerifyVectorOfTables(fields()) && VerifyOffset(verifier, VT_KEYS) &&
+           verifier.VerifyVector(keys()) && verifier.VerifyVectorOfTables(keys()) &&
+           VerifyField<int64_t>(verifier, VT_LAST_COMMIT, 8) && VerifyField<int64_t>(verifier, VT_LSN, 8) &&
+           VerifyOffset(verifier, VT_MSG_TIME) && verifier.VerifyString(msg_time()) &&
+           VerifyOffset(verifier, VT_NEW_DATA) && verifier.VerifyVector(new_data()) &&
+           verifier.VerifyVectorOfTables(new_data()) && VerifyField<int32_t>(verifier, VT_OLD_DATA, 4) &&
+           VerifyOffset(verifier, VT_OP_TYPE) && verifier.VerifyString(op_type()) &&
+           VerifyField<int64_t>(verifier, VT_SCN, 8) && VerifyField<int64_t>(verifier, VT_SEQ, 8) &&
+           VerifyOffset(verifier, VT_TABLE_) && verifier.VerifyString(table_()) &&
+           VerifyField<int64_t>(verifier, VT_TX_SEQ, 8) && VerifyOffset(verifier, VT_TX_TIME) &&
+           verifier.VerifyString(tx_time()) && verifier.EndTable();
+  }
 };
 
-struct DMLBuilder {
-    typedef DML Table;
-    ::flatbuffers::FlatBufferBuilder &fbb_;
-    ::flatbuffers::uoffset_t start_;
+struct DMLBuilder
+{
+  typedef DML                       Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t          start_;
 
-    void
-    add_check_point(::flatbuffers::Offset<::flatbuffers::String> check_point) {
-        fbb_.AddOffset(DML::VT_CHECK_POINT, check_point);
-    }
+  void add_check_point(::flatbuffers::Offset<::flatbuffers::String> check_point)
+  {
+    fbb_.AddOffset(DML::VT_CHECK_POINT, check_point);
+  }
 
-    void add_db_name(::flatbuffers::Offset<::flatbuffers::String> db_name) {
-        fbb_.AddOffset(DML::VT_DB_NAME, db_name);
-    }
+  void add_db_name(::flatbuffers::Offset<::flatbuffers::String> db_name) { fbb_.AddOffset(DML::VT_DB_NAME, db_name); }
 
-    void add_dn(int16_t dn) { fbb_.AddElement<int16_t>(DML::VT_DN, dn, 0); }
+  void add_dn(int16_t dn) { fbb_.AddElement<int16_t>(DML::VT_DN, dn, 0); }
 
-    void
-    add_fields(::flatbuffers::Offset<
-               ::flatbuffers::Vector<::flatbuffers::Offset<loft::Field>>> fields
-    ) {
-        fbb_.AddOffset(DML::VT_FIELDS, fields);
-    }
+  void add_fields(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<loft::Field>>> fields)
+  {
+    fbb_.AddOffset(DML::VT_FIELDS, fields);
+  }
 
-    void
-    add_keys(::flatbuffers::Offset<
-             ::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>>> keys) {
-        fbb_.AddOffset(DML::VT_KEYS, keys);
-    }
+  void add_keys(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>>> keys)
+  {
+    fbb_.AddOffset(DML::VT_KEYS, keys);
+  }
 
-    void add_last_commit(int64_t last_commit) {
-        fbb_.AddElement<int64_t>(DML::VT_LAST_COMMIT, last_commit, 0);
-    }
+  void add_last_commit(int64_t last_commit) { fbb_.AddElement<int64_t>(DML::VT_LAST_COMMIT, last_commit, 0); }
 
-    void add_lsn(int64_t lsn) { fbb_.AddElement<int64_t>(DML::VT_LSN, lsn, 0); }
+  void add_lsn(int64_t lsn) { fbb_.AddElement<int64_t>(DML::VT_LSN, lsn, 0); }
 
-    void add_msg_time(::flatbuffers::Offset<::flatbuffers::String> msg_time) {
-        fbb_.AddOffset(DML::VT_MSG_TIME, msg_time);
-    }
+  void add_msg_time(::flatbuffers::Offset<::flatbuffers::String> msg_time)
+  {
+    fbb_.AddOffset(DML::VT_MSG_TIME, msg_time);
+  }
 
-    void add_new_data(
-        ::flatbuffers::Offset<
-            ::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>>> new_data
-    ) {
-        fbb_.AddOffset(DML::VT_NEW_DATA, new_data);
-    }
+  void add_new_data(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>>> new_data)
+  {
+    fbb_.AddOffset(DML::VT_NEW_DATA, new_data);
+  }
 
-    void add_old_data(int32_t old_data) {
-        fbb_.AddElement<int32_t>(DML::VT_OLD_DATA, old_data, 0);
-    }
+  void add_old_data(int32_t old_data) { fbb_.AddElement<int32_t>(DML::VT_OLD_DATA, old_data, 0); }
 
-    void add_op_type(::flatbuffers::Offset<::flatbuffers::String> op_type) {
-        fbb_.AddOffset(DML::VT_OP_TYPE, op_type);
-    }
+  void add_op_type(::flatbuffers::Offset<::flatbuffers::String> op_type) { fbb_.AddOffset(DML::VT_OP_TYPE, op_type); }
 
-    void add_scn(int64_t scn) { fbb_.AddElement<int64_t>(DML::VT_SCN, scn, 0); }
+  void add_scn(int64_t scn) { fbb_.AddElement<int64_t>(DML::VT_SCN, scn, 0); }
 
-    void add_seq(int64_t seq) { fbb_.AddElement<int64_t>(DML::VT_SEQ, seq, 0); }
+  void add_seq(int64_t seq) { fbb_.AddElement<int64_t>(DML::VT_SEQ, seq, 0); }
 
-    void add_table_(::flatbuffers::Offset<::flatbuffers::String> table_) {
-        fbb_.AddOffset(DML::VT_TABLE_, table_);
-    }
+  void add_table_(::flatbuffers::Offset<::flatbuffers::String> table_) { fbb_.AddOffset(DML::VT_TABLE_, table_); }
 
-    void add_tx_seq(int64_t tx_seq) {
-        fbb_.AddElement<int64_t>(DML::VT_TX_SEQ, tx_seq, 0);
-    }
+  void add_tx_seq(int64_t tx_seq) { fbb_.AddElement<int64_t>(DML::VT_TX_SEQ, tx_seq, 0); }
 
-    void add_tx_time(::flatbuffers::Offset<::flatbuffers::String> tx_time) {
-        fbb_.AddOffset(DML::VT_TX_TIME, tx_time);
-    }
+  void add_tx_time(::flatbuffers::Offset<::flatbuffers::String> tx_time) { fbb_.AddOffset(DML::VT_TX_TIME, tx_time); }
 
-    explicit DMLBuilder(::flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) {
-        start_ = fbb_.StartTable();
-    }
+  explicit DMLBuilder(::flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) { start_ = fbb_.StartTable(); }
 
-    ::flatbuffers::Offset<DML> Finish() {
-        const auto end = fbb_.EndTable(start_);
-        auto o = ::flatbuffers::Offset<DML>(end);
-        return o;
-    }
+  ::flatbuffers::Offset<DML> Finish()
+  {
+    const auto end = fbb_.EndTable(start_);
+    auto       o   = ::flatbuffers::Offset<DML>(end);
+    return o;
+  }
 };
 
-inline ::flatbuffers::Offset<DML> CreateDML(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    ::flatbuffers::Offset<::flatbuffers::String> check_point = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> db_name = 0,
-    int16_t dn = 0,
-    ::flatbuffers::Offset<
-        ::flatbuffers::Vector<::flatbuffers::Offset<loft::Field>>> fields = 0,
-    ::flatbuffers::Offset<
-        ::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>>> keys = 0,
-    int64_t last_commit = 0,
-    int64_t lsn = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> msg_time = 0,
-    ::flatbuffers::Offset<
-        ::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>>> new_data =
-        0,
-    int32_t old_data = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> op_type = 0,
-    int64_t scn = 0,
-    int64_t seq = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> table_ = 0,
-    int64_t tx_seq = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> tx_time = 0
-) {
-    DMLBuilder builder_(_fbb);
-    builder_.add_tx_seq(tx_seq);
-    builder_.add_seq(seq);
-    builder_.add_scn(scn);
-    builder_.add_lsn(lsn);
-    builder_.add_last_commit(last_commit);
-    builder_.add_tx_time(tx_time);
-    builder_.add_table_(table_);
-    builder_.add_op_type(op_type);
-    builder_.add_old_data(old_data);
-    builder_.add_new_data(new_data);
-    builder_.add_msg_time(msg_time);
-    builder_.add_keys(keys);
-    builder_.add_fields(fields);
-    builder_.add_db_name(db_name);
-    builder_.add_check_point(check_point);
-    builder_.add_dn(dn);
-    return builder_.Finish();
+inline ::flatbuffers::Offset<DML> CreateDML(::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String>                              check_point = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> db_name = 0, int16_t dn = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<loft::Field>>>  fields = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>>> keys = 0, int64_t last_commit = 0,
+    int64_t lsn = 0, ::flatbuffers::Offset<::flatbuffers::String> msg_time = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<loft::kvPair>>> new_data = 0,
+    int32_t old_data = 0, ::flatbuffers::Offset<::flatbuffers::String> op_type = 0, int64_t scn = 0, int64_t seq = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> table_ = 0, int64_t tx_seq = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> tx_time = 0)
+{
+  DMLBuilder builder_(_fbb);
+  builder_.add_tx_seq(tx_seq);
+  builder_.add_seq(seq);
+  builder_.add_scn(scn);
+  builder_.add_lsn(lsn);
+  builder_.add_last_commit(last_commit);
+  builder_.add_tx_time(tx_time);
+  builder_.add_table_(table_);
+  builder_.add_op_type(op_type);
+  builder_.add_old_data(old_data);
+  builder_.add_new_data(new_data);
+  builder_.add_msg_time(msg_time);
+  builder_.add_keys(keys);
+  builder_.add_fields(fields);
+  builder_.add_db_name(db_name);
+  builder_.add_check_point(check_point);
+  builder_.add_dn(dn);
+  return builder_.Finish();
 }
 
-inline ::flatbuffers::Offset<DML> CreateDMLDirect(
-    ::flatbuffers::FlatBufferBuilder &_fbb,
-    const char *check_point = nullptr,
-    const char *db_name = nullptr,
-    int16_t dn = 0,
-    const std::vector<::flatbuffers::Offset<loft::Field>> *fields = nullptr,
-    const std::vector<::flatbuffers::Offset<loft::kvPair>> *keys = nullptr,
-    int64_t last_commit = 0,
-    int64_t lsn = 0,
-    const char *msg_time = nullptr,
-    const std::vector<::flatbuffers::Offset<loft::kvPair>> *new_data = nullptr,
-    int32_t old_data = 0,
-    const char *op_type = nullptr,
-    int64_t scn = 0,
-    int64_t seq = 0,
-    const char *table_ = nullptr,
-    int64_t tx_seq = 0,
-    const char *tx_time = nullptr
-) {
-    auto check_point__ = check_point ? _fbb.CreateString(check_point) : 0;
-    auto db_name__ = db_name ? _fbb.CreateString(db_name) : 0;
-    auto fields__ =
-        fields ? _fbb.CreateVector<::flatbuffers::Offset<loft::Field>>(*fields)
-               : 0;
-    auto keys__ =
-        keys ? _fbb.CreateVector<::flatbuffers::Offset<loft::kvPair>>(*keys)
-             : 0;
-    auto msg_time__ = msg_time ? _fbb.CreateString(msg_time) : 0;
-    auto new_data__ =
-        new_data
-            ? _fbb.CreateVector<::flatbuffers::Offset<loft::kvPair>>(*new_data)
-            : 0;
-    auto op_type__ = op_type ? _fbb.CreateString(op_type) : 0;
-    auto table___ = table_ ? _fbb.CreateString(table_) : 0;
-    auto tx_time__ = tx_time ? _fbb.CreateString(tx_time) : 0;
-    return loft::CreateDML(
-        _fbb, check_point__, db_name__, dn, fields__, keys__, last_commit, lsn,
-        msg_time__, new_data__, old_data, op_type__, scn, seq, table___, tx_seq,
-        tx_time__
-    );
+inline ::flatbuffers::Offset<DML> CreateDMLDirect(::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *check_point = nullptr, const char *db_name = nullptr, int16_t dn = 0,
+    const std::vector<::flatbuffers::Offset<loft::Field>>  *fields = nullptr,
+    const std::vector<::flatbuffers::Offset<loft::kvPair>> *keys = nullptr, int64_t last_commit = 0, int64_t lsn = 0,
+    const char *msg_time = nullptr, const std::vector<::flatbuffers::Offset<loft::kvPair>> *new_data = nullptr,
+    int32_t old_data = 0, const char *op_type = nullptr, int64_t scn = 0, int64_t seq = 0, const char *table_ = nullptr,
+    int64_t tx_seq = 0, const char *tx_time = nullptr)
+{
+  auto check_point__ = check_point ? _fbb.CreateString(check_point) : 0;
+  auto db_name__     = db_name ? _fbb.CreateString(db_name) : 0;
+  auto fields__      = fields ? _fbb.CreateVector<::flatbuffers::Offset<loft::Field>>(*fields) : 0;
+  auto keys__        = keys ? _fbb.CreateVector<::flatbuffers::Offset<loft::kvPair>>(*keys) : 0;
+  auto msg_time__    = msg_time ? _fbb.CreateString(msg_time) : 0;
+  auto new_data__    = new_data ? _fbb.CreateVector<::flatbuffers::Offset<loft::kvPair>>(*new_data) : 0;
+  auto op_type__     = op_type ? _fbb.CreateString(op_type) : 0;
+  auto table___      = table_ ? _fbb.CreateString(table_) : 0;
+  auto tx_time__     = tx_time ? _fbb.CreateString(tx_time) : 0;
+  return loft::CreateDML(_fbb,
+      check_point__,
+      db_name__,
+      dn,
+      fields__,
+      keys__,
+      last_commit,
+      lsn,
+      msg_time__,
+      new_data__,
+      old_data,
+      op_type__,
+      scn,
+      seq,
+      table___,
+      tx_seq,
+      tx_time__);
 }
 
-inline bool VerifyDataMeta(
-    ::flatbuffers::Verifier &verifier, const void *obj, DataMeta type
-) {
-    switch (type) {
-        case DataMeta_NONE: {
-            return true;
-        }
-        case DataMeta_LongVal: {
-            auto ptr = reinterpret_cast<const loft::LongVal *>(obj);
-            return verifier.VerifyTable(ptr);
-        }
-        case DataMeta_DoubleVal: {
-            auto ptr = reinterpret_cast<const loft::DoubleVal *>(obj);
-            return verifier.VerifyTable(ptr);
-        }
-        case DataMeta_StringVal: {
-            auto ptr = reinterpret_cast<const loft::StringVal *>(obj);
-            return verifier.VerifyTable(ptr);
-        }
-        default:
-            return true;
+inline bool VerifyDataMeta(::flatbuffers::Verifier &verifier, const void *obj, DataMeta type)
+{
+  switch (type) {
+    case DataMeta_NONE: {
+      return true;
     }
-}
-
-inline bool VerifyDataMetaVector(
-    ::flatbuffers::Verifier &verifier,
-    const ::flatbuffers::Vector<::flatbuffers::Offset<void>> *values,
-    const ::flatbuffers::Vector<uint8_t> *types
-) {
-    if (!values || !types) {
-        return !values && !types;
+    case DataMeta_LongVal: {
+      auto ptr = reinterpret_cast<const loft::LongVal *>(obj);
+      return verifier.VerifyTable(ptr);
     }
-    if (values->size() != types->size()) {
-        return false;
+    case DataMeta_DoubleVal: {
+      auto ptr = reinterpret_cast<const loft::DoubleVal *>(obj);
+      return verifier.VerifyTable(ptr);
     }
-    for (::flatbuffers::uoffset_t i = 0; i < values->size(); ++i) {
-        if (!VerifyDataMeta(
-                verifier, values->Get(i), types->GetEnum<DataMeta>(i)
-            )) {
-            return false;
-        }
+    case DataMeta_StringVal: {
+      auto ptr = reinterpret_cast<const loft::StringVal *>(obj);
+      return verifier.VerifyTable(ptr);
     }
-    return true;
+    default: return true;
+  }
 }
 
-inline const loft::DML *GetDML(const void *buf) {
-    return ::flatbuffers::GetRoot<loft::DML>(buf);
+inline bool VerifyDataMetaVector(::flatbuffers::Verifier     &verifier,
+    const ::flatbuffers::Vector<::flatbuffers::Offset<void>> *values, const ::flatbuffers::Vector<uint8_t> *types)
+{
+  if (!values || !types) {
+    return !values && !types;
+  }
+  if (values->size() != types->size()) {
+    return false;
+  }
+  for (::flatbuffers::uoffset_t i = 0; i < values->size(); ++i) {
+    if (!VerifyDataMeta(verifier, values->Get(i), types->GetEnum<DataMeta>(i))) {
+      return false;
+    }
+  }
+  return true;
 }
 
-inline const loft::DML *GetSizePrefixedDML(const void *buf) {
-    return ::flatbuffers::GetSizePrefixedRoot<loft::DML>(buf);
+inline const loft::DML *GetDML(const void *buf) { return ::flatbuffers::GetRoot<loft::DML>(buf); }
+
+inline const loft::DML *GetSizePrefixedDML(const void *buf)
+{
+  return ::flatbuffers::GetSizePrefixedRoot<loft::DML>(buf);
 }
 
-inline bool VerifyDMLBuffer(::flatbuffers::Verifier &verifier) {
-    return verifier.VerifyBuffer<loft::DML>(nullptr);
+inline bool VerifyDMLBuffer(::flatbuffers::Verifier &verifier) { return verifier.VerifyBuffer<loft::DML>(nullptr); }
+
+inline bool VerifySizePrefixedDMLBuffer(::flatbuffers::Verifier &verifier)
+{
+  return verifier.VerifySizePrefixedBuffer<loft::DML>(nullptr);
 }
 
-inline bool VerifySizePrefixedDMLBuffer(::flatbuffers::Verifier &verifier) {
-    return verifier.VerifySizePrefixedBuffer<loft::DML>(nullptr);
+inline void FinishDMLBuffer(::flatbuffers::FlatBufferBuilder &fbb, ::flatbuffers::Offset<loft::DML> root)
+{
+  fbb.Finish(root);
 }
 
-inline void FinishDMLBuffer(
-    ::flatbuffers::FlatBufferBuilder &fbb, ::flatbuffers::Offset<loft::DML> root
-) {
-    fbb.Finish(root);
+inline void FinishSizePrefixedDMLBuffer(::flatbuffers::FlatBufferBuilder &fbb, ::flatbuffers::Offset<loft::DML> root)
+{
+  fbb.FinishSizePrefixed(root);
 }
 
-inline void FinishSizePrefixedDMLBuffer(
-    ::flatbuffers::FlatBufferBuilder &fbb, ::flatbuffers::Offset<loft::DML> root
-) {
-    fbb.FinishSizePrefixed(root);
-}
+}  // namespace loft
 
-} // namespace loft
-
-#endif // FLATBUFFERS_GENERATED_DML_LOFT_H_
+#endif  // FLATBUFFERS_GENERATED_DML_LOFT_H_

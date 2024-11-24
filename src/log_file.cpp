@@ -359,39 +359,7 @@ RC LogFileManager::next_file(BinLogFileWriter &file_writer) {
 }
 
 LogFileManager::~LogFileManager() {
-  // 设置停止标志
-  stop_flag_ = true;
 
-  // 2. 等待任务收集线程结束, 现在只有 1 个
-  for (auto& thread : task_collector_threads_) {
-    if (thread.joinable()) {
-      thread.join();
-    }
-  }
-
-  // 3. 关闭线程池，析构会自动调用 shutdown() 和 await_termination()
-  // 但是一定要手动执行这两个函数，否则 索引文件可能会被先关闭，导致写入 索引文件失败
-  if (thread_pool_) {
-    thread_pool_->shutdown();
-  }
-
-  // 确保所有待处理的批次都被处理，等价于 await_termination() 里的等待
-//  {  如果 转换/写入 分离之后，就不用 等待了
-//    std::unique_lock<std::mutex> lock(batch_queue_.mutex_);
-//    while (!batch_queue_.queue_.empty()) {
-//      batch_queue_.queue_.front()->run();
-//      batch_queue_.queue_.pop();
-//    }
-//  }
-  // 等待写入线程结束
-  if (writer_thread_.joinable()) {
-    writer_thread_.join();
-  }
-
-  // 关闭文件写入器
-//  if (file_writer_) {
-//    file_writer_->close();
-//  }
   // 4. 最后关闭 index_fd_
   if (index_fd_ >= 0) {
     ::close(index_fd_);
@@ -417,28 +385,58 @@ RC LogFileManager::get_last_status_from_filename(
     const std::string &filename, uint64 &scn, uint32 &seq, std::string &ckp)
 {
   uint32 file_no;
-  get_fileno_from_filename(filename, file_no);
-
-  // 处理 ckp，返回查询值
-  ckp = file_ckp_[file_no];
-  std::string input = ckp;
-
-  std::string delimiter = "-";
-  size_t pos = 0;
-  std::string token;
-  int count = 0;
-  uint64 numbers[2]; // 用于存储提取的数字
-
-  while ((pos = input.find(delimiter)) != std::string::npos) {
-    token = input.substr(0, pos);
-    numbers[count] = std::stoi(token); // 将字符串转换为整数
-    input.erase(0, pos + delimiter.length());
-    count++;
-    if (count == 2) break; // 已经提取了 scn 和 seq
+  RC rc = get_fileno_from_filename(filename, file_no);
+  if (rc != RC::SUCCESS) {
+    return rc;
   }
 
-  scn = numbers[0];
-  seq = static_cast<uint32>(numbers[1]);
+  // 获取文件编号对应的 checkpoint
+  auto iter = file_ckp_.find(file_no);
+  if (iter == file_ckp_.end()) {
+    return RC::FILE_NOT_EXIST;  // 文件不存在
+  }
+  ckp = iter->second;
+
+  // 解析 ckp，格式应为 "trxSeq-seq-scn"
+  std::string delimiter = "-";
+  size_t pos = 0;
+  size_t count = 0;
+  uint64 numbers[3] = {0};  // 用于存储解析的数字
+
+  std::string input = ckp;
+  while ((pos = input.find(delimiter)) != std::string::npos && count < 3) {
+    std::string token = input.substr(0, pos);
+
+    try {
+      numbers[count] = std::stoull(token);  // 使用 stoull 解析为 uint64
+    } catch (const std::exception &e) {
+      LOG_ERROR("Failed to parse checkpoint: %s", e.what());
+      return RC::INVALID_ARGUMENT;
+    }
+
+    input.erase(0, pos + delimiter.length());
+    count++;
+  }
+
+  // 最后一个数字
+  if (count == 2 && !input.empty()) {
+    try {
+      numbers[count] = std::stoull(input);  // 解析最后一个数字
+    } catch (const std::exception &e) {
+      LOG_ERROR("Failed to parse final checkpoint value: %s", e.what());
+      return RC::INVALID_ARGUMENT;
+    }
+  }
+
+  if (count != 2) {
+    LOG_ERROR("Invalid checkpoint format: %s", ckp.c_str());
+    return RC::INVALID_ARGUMENT;  // 检查是否解析了足够的字段
+  }
+
+  // 分配解析后的值
+  seq = static_cast<uint32>(numbers[1]);  // `seq` 是 uint32
+  scn = numbers[2];                       // `scn` 是 uint64
+
   return RC::SUCCESS;
 }
 
@@ -491,3 +489,49 @@ void LogFileManager::init_thread_pool(int core_size, int max_size) {
   thread_pool_->execute([this] { batch_queue_.process_batches(); });
 
 }
+
+void LogFileManager::shutdown() {
+  if (!stop_flag_) {
+    stop_flag_ = true;
+
+    // 通知所有等待线程
+    task_cond_.notify_all();
+    batch_queue_.cv_.notify_all();
+    result_queue_.cv_.notify_all();
+
+    for (auto& thread : task_collector_threads_) {
+      if (thread.joinable()) thread.join();
+    }
+    if (thread_pool_) thread_pool_->shutdown();
+    if (writer_thread_.joinable()) writer_thread_.join();
+
+    log_progress();
+  }
+}
+void LogFileManager::wait_for_completion() {
+  LOG_DEBUG("Waiting for all tasks to complete...");
+
+  // 等待所有任务进入批次队列
+  while (pending_tasks_ > 0) {
+//    LOG_DEBUG("Pending tasks: %zu", pending_tasks_.load());
+    std::this_thread::sleep_for(std::chrono::milliseconds(10)); // 等待短暂时间后重试
+  }
+
+  // 等待所有批次任务完成
+  while (!batch_queue_.queue_.empty()) {
+//    LOG_DEBUG("Batch queue not empty. Remaining batches: %zu", batch_queue_.queue_.size());
+    std::this_thread::sleep_for(std::chrono::milliseconds(10)); // 等待短暂时间后重试
+  }
+
+  // 等待写入队列完成
+  {
+    std::unique_lock<std::mutex> lock(result_queue_.mutex_);
+    while (!result_queue_.pending_results_.empty()) {
+//      LOG_DEBUG("Pending results in result queue: %zu", result_queue_.pending_results_.size());
+      result_queue_.cv_.wait_for(lock, std::chrono::milliseconds(10));
+    }
+  }
+
+  LOG_DEBUG("All tasks and writes completed.");
+}
+

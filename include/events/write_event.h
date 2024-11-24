@@ -44,37 +44,37 @@ public:
   /*
     delete,update
   */
-  void set_null_before(std::vector<bool> &&t)
+  void set_null_before(std::vector<uint8> &&t)
   {
     assert(t.size() == rows_before.size());
-    null_before = t;
+    null_before = std::move(t);
   }
 
   /*
     insert,update
   */
-  void set_null_after(std::vector<bool> &&t)
+  void set_null_after(std::vector<uint8> &&t)
   {
     assert(t.size() == rows_after.size());
-    null_after = t;
+    null_after = std::move(t);
   }
 
   /*
     insert,update
   */
-  void set_rows_after(std::vector<int> &&rows)
+  void set_rows_after(std::vector<int> &&t)
   {
-    assert(rows.size() <= m_width);
-    this->rows_after = rows;
+    assert(t.size() <= m_width);
+    this->rows_after = std::move(t);
   }
 
   /*
     delete,update
   */
-  void set_rows_before(std::vector<int> &&rows)
+  void set_rows_before(std::vector<int> &&t)
   {
-    assert(rows.size() <= m_width);
-    this->rows_before = rows;
+    assert(t.size() <= m_width);
+    this->rows_before = std::move(t);
   }
 
   size_t get_data_size() override { return calculate_event_size(); }
@@ -98,7 +98,7 @@ public:
     switch (type) {
       // Fixed-length numeric types
       case enum_field_types::MYSQL_TYPE_TINY:
-        handle_fixed_length(buf, data, capacity, data_size, 1);
+        handle_fixed_length(buf, static_cast<void *>(data), capacity, data_size, 1);
         break;
       case enum_field_types::MYSQL_TYPE_SHORT:
         handle_fixed_length(buf, data, capacity, data_size, 2);
@@ -148,6 +148,8 @@ public:
         buf_resize(buf, capacity, data_size, data_size + demi_size);
         decimal2bin(&t, buf.get() + data_size, precision, frac);
         data_size += demi_size;
+
+        delete[] t.buf;
         break;
       }
 
@@ -156,7 +158,6 @@ public:
       case enum_field_types::MYSQL_TYPE_STRING:
         handle_string_type(buf, data, capacity, data_size, length, str_length);
         break;
-
       // Unimplemented types
       case enum_field_types::MYSQL_TYPE_JSON:
       case enum_field_types::MYSQL_TYPE_TIMESTAMP:
@@ -198,6 +199,9 @@ public:
   bool write(Basic_ostream *ostream) override;
   bool write_data_header(Basic_ostream *) override;
   bool write_data_body(Basic_ostream *) override;
+
+  size_t write_data_header_to_buffer(uchar* buffer) override;
+  size_t write_data_body_to_buffer(uchar* buffer) override;
 
 private:
   size_t calculate_event_size();
@@ -241,8 +245,8 @@ private:
 
   std::vector<int>  rows_before;
   std::vector<int>  rows_after;
-  std::vector<bool> null_after;
-  std::vector<bool> null_before;
+  std::vector<uint8> null_after;
+  std::vector<uint8> null_before;
 
   bool              m_is_before;
 };

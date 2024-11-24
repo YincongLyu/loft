@@ -48,49 +48,6 @@ public:
   uint8 number_of_event_types;
 };
 
-/*
-
-#####  #####  ###### #    #          ####  ##### # #####          ######
-#    # #    # #      #    #         #    #   #   # #    #         #
-#    # #    # #####  #    #         #        #   # #    #         #####
-#####  #####  #      #    #         #  ###   #   # #    #         #
-#      #   #  #       #  #          #    #   #   # #    #         #
-#      #    # ######   ##            ####    #   # #####          ######
-                            #######                       #######
-                                                                                                                                                                                                  ~
- */
-
-class Previous_gtids_event : public AbstractEvent
-{
-public:
-  // TODO add class Gtid_set
-  Previous_gtids_event(const Gtid_set *set);
-  ~Previous_gtids_event() override;
-
-  DISALLOW_COPY(Previous_gtids_event);
-
-  // ********* impl virtual function *********************
-  size_t get_data_size() override { return buf_size_; }
-
-  bool write(Basic_ostream *ostream) override;
-  bool write_data_body(Basic_ostream *ostream) override;
-
-  const uchar *get_buf() { return buf_; }
-
-  /**
-    格式化输出 prev gtid set 信息
-  */
-  //    char *get_str(size_t *length, const Gtid_set::String_format
-  //    *string_format) const;
-  // Add all GTIDs from this event to the given Gtid_set.
-  //    int add_to_set(Gtid_set *gtid_set) const;
-
-  size_t get_encoded_length() const;
-
-protected:
-  size_t       buf_size_;
-  const uchar *buf_;
-};
 
 /*
 
@@ -126,6 +83,9 @@ public:
   bool   write(Basic_ostream *ostream) override;
   bool   write_data_header(Basic_ostream *ostream) override;
   bool   write_data_body(Basic_ostream *ostream) override;
+
+  size_t write_data_header_to_buffer(uchar* buffer) override;
+  size_t write_data_body_to_buffer(uchar* buffer) override;
 
 private:
   /**
@@ -282,7 +242,7 @@ public:
 class Xid_event : public AbstractEvent
 {
 public:
-  Xid_event(uint64_t xid_arg, uint64 immediate_commit_timestamp_arg);
+  Xid_event(uint64 xid_arg, uint64 immediate_commit_timestamp_arg);
   ~Xid_event() override = default;
   DISALLOW_COPY(Xid_event);
 
@@ -291,8 +251,11 @@ public:
 
   bool write(Basic_ostream *ostream) override;
 
+  size_t write_data_header_to_buffer(uchar* buffer) override;
+  size_t write_data_body_to_buffer(uchar* buffer) override;
+
 private:
-  uint64_t xid_;
+  uint64 xid_;
 };
 
 /**
@@ -318,6 +281,9 @@ public:
   size_t get_data_size() override { return ident_len_ + ROTATE_HEADER_LEN; }
 
   bool write(Basic_ostream *ostream) override;
+
+  size_t write_data_header_to_buffer(uchar* buffer) override;
+  size_t write_data_body_to_buffer(uchar* buffer) override;
 
 public:
   const std::string new_log_ident_;  // nxt binlog file_name

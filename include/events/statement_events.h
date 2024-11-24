@@ -22,7 +22,14 @@ public:
 
   DISALLOW_COPY(Query_event);
 
+  size_t get_data_size() override { return  AbstractEvent::QUERY_HEADER_LEN + status_vars_len_ +
+                                           db_len_ + 1 + q_len_; }
   bool write(Basic_ostream *ostream) override;
+  size_t write_data_header_to_buffer(uchar* buffer) override;
+  size_t write_data_body_to_buffer(uchar* buffer) override;
+
+private:
+  void calculate_status_vars_len();
 
 public:
   /** query event post-header */

@@ -48,6 +48,21 @@ bool AbstractEvent::write_common_header(Basic_ostream *ostream, size_t event_dat
   return ostream->write(header, LOG_EVENT_HEADER_LEN);
 }
 
+size_t AbstractEvent::write_common_header_to_buffer(uchar* buffer) {
+  common_header_->data_written_ = LOG_EVENT_HEADER_LEN + get_data_size();
+  // 先用占位符填充 log_pos_
+  common_header_->log_pos_ = POSITION_PLACEHOLDER;
+
+  int4store(buffer, common_header_->timestamp_);
+  buffer[EVENT_TYPE_OFFSET] = type_code_;
+  int4store(buffer + SERVER_ID_OFFSET, SERVER_ID);
+  int4store(buffer + EVENT_LEN_OFFSET, common_header_->data_written_);
+  int4store(buffer + LOG_POS_OFFSET, common_header_->log_pos_);
+  int2store(buffer + FLAGS_OFFSET, common_header_->flags_);
+
+  return LOG_EVENT_HEADER_LEN;
+}
+
 bool AbstractEvent::write_common_footer(Basic_ostream *ostream)
 {
   LOG_INFO("current event checksum write pos: %llu", ostream->get_position());

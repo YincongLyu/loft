@@ -12,8 +12,7 @@ Rows_event::Rows_event(
   m_after_capacity = INITIAL_SIZE;
   before_data_size_used = 0;
   after_data_size_used = 0;
-//  data_size1 = 0;
-//  data_size2 = 0;
+
   this->Set_width(wid);
   this->Set_flags(flag);
   cols_init();
@@ -206,3 +205,107 @@ size_t Rows_event::calculate_event_size()
   }
   return event_size;
 }
+
+size_t Rows_event::write_data_header_to_buffer(uchar *buffer) {
+  int6store(buffer + ROWS_MAPID_OFFSET, m_table_id.get_id());
+  int2store(buffer + ROWS_FLAGS_OFFSET, m_flags);
+  uint extra_row_info_payloadlen = EXTRA_ROW_INFO_HEADER_LENGTH;
+  int2store(buffer + ROWS_VHLEN_OFFSET, extra_row_info_payloadlen);
+
+  return ROWS_HEADER_LEN_V2;
+}
+
+size_t Rows_event::write_data_body_to_buffer(uchar *buffer) {
+  uchar* current_pos = buffer;
+
+  // 写入width
+  uchar sbuf[sizeof(m_width) + 1];
+  uchar *const sbuf_end = net_store_length(sbuf, (size_t)m_width);
+  memcpy(current_pos, sbuf, sbuf_end - sbuf);
+  current_pos += (sbuf_end - sbuf);
+
+  // 处理DELETE和UPDATE事件的before image
+  if (m_type == Log_event_type::UPDATE_ROWS_EVENT || m_type == Log_event_type::DELETE_ROWS_EVENT) {
+    int N = Get_N();
+    if (rows_before.size() != 0) {
+      memset(columns_before_image.get(), 0, N * sizeof(uchar));
+    }
+
+    for (int i = 0; i < rows_before.size(); i++) {
+      assert(rows_before[i] <= m_width);
+      int n = N - ((rows_before[i] - 1) / 8 + 1);
+      set_N_bit(*(columns_before_image.get() + n), (rows_before[i] - 1) % 8 + 1);
+    }
+
+    if (rows_before.size() != 0) {
+      size_t row_bitmap_size = (rows_before.size() + 7) / 8;
+      row_bitmap_before = std::make_unique<uchar[]>(row_bitmap_size);
+      memset(row_bitmap_before.get(), 0x00, row_bitmap_size * sizeof(uchar));
+    }
+
+    std::reverse(columns_before_image.get(), columns_before_image.get() + N);
+    memcpy(current_pos, columns_before_image.get(), N);
+    current_pos += N;
+  }
+
+  // 处理WRITE和UPDATE事件的after image
+  if (m_type == Log_event_type::UPDATE_ROWS_EVENT || m_type == Log_event_type::WRITE_ROWS_EVENT) {
+    int N = Get_N();
+    if (rows_after.size() != 0) {
+      memset(columns_after_image.get(), 0, N * sizeof(uchar));
+    }
+
+    for (int i = 0; i < rows_after.size(); i++) {
+      assert(rows_after[i] <= m_width);
+      int n = N - ((rows_after[i] - 1) / 8 + 1);
+      set_N_bit(*(columns_after_image.get() + n), (rows_after[i] - 1) % 8 + 1);
+    }
+
+    if (rows_after.size() != 0) {
+      size_t row_bitmap_size = (rows_after.size() + 7) / 8;
+      row_bitmap_after = std::make_unique<uchar[]>(row_bitmap_size);
+      memset(row_bitmap_after.get(), 0x00, row_bitmap_size * sizeof(uchar));
+    }
+
+    std::reverse(columns_after_image.get(), columns_after_image.get() + N);
+    memcpy(current_pos, columns_after_image.get(), N);
+    current_pos += N;
+  }
+
+  // 写入before数据
+  if (m_type == Log_event_type::UPDATE_ROWS_EVENT || m_type == Log_event_type::DELETE_ROWS_EVENT) {
+    int N = (rows_before.size() + 7) / 8;
+    for (int i = 0; i < null_before.size(); i++) {
+      if (null_before[i]) {
+        int n = N - (i / 8 + 1);
+        set_N_bit(*(row_bitmap_before.get() + n), i % 8 + 1);
+      }
+    }
+    std::reverse(row_bitmap_before.get(), row_bitmap_before.get() + N);
+    memcpy(current_pos, row_bitmap_before.get(), N);
+    current_pos += N;
+
+    memcpy(current_pos, m_rows_before_buf.get(), before_data_size_used);
+    current_pos += before_data_size_used;
+  }
+
+  // 写入after数据
+  if (m_type == Log_event_type::UPDATE_ROWS_EVENT || m_type == Log_event_type::WRITE_ROWS_EVENT) {
+    int N = (rows_after.size() + 7) / 8;
+    for (int i = 0; i < null_after.size(); i++) {
+      if (null_after[i]) {
+        int n = N - (i / 8 + 1);
+        set_N_bit(*(row_bitmap_after.get() + n), i % 8 + 1);
+      }
+    }
+    std::reverse(row_bitmap_after.get(), row_bitmap_after.get() + N);
+    memcpy(current_pos, row_bitmap_after.get(), N);
+    current_pos += N;
+
+    memcpy(current_pos, m_rows_after_buf.get(), after_data_size_used);
+    current_pos += after_data_size_used;
+  }
+
+  return current_pos - buffer;
+}
+

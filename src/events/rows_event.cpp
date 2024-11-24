@@ -206,6 +206,61 @@ bool Table_map_event::write_data_body(Basic_ostream *ostream)
          ostream->write(mbuf, (size_t)(mbuf_end - mbuf)) &&
          ostream->write(m_field_metadata_.get(), m_field_metadata_size_) &&
          ostream->write(m_null_bits_.get(), (m_colcnt_ + 7) / 8);
+}
+size_t Table_map_event::write_data_header_to_buffer(uchar *buffer)
+{
+  assert(m_table_id_.is_valid());
 
-  // 最后一个 m_optional_metadata_len, m_optional_metadata 可以暂时不管
+  // 写入 table id 和 flags
+  int6store(buffer + TM_MAPID_OFFSET, m_table_id_.get_id());
+  int2store(buffer + TM_FLAGS_OFFSET, m_flags);
+
+  return AbstractEvent::TABLE_MAP_HEADER_LEN;
+}
+size_t Table_map_event::write_data_body_to_buffer(uchar *buffer)
+{
+  assert(!m_dbnam_.empty());
+  assert(!m_tblnam_.empty());
+
+  uchar *current_pos = buffer;
+
+  // 写入数据库名长度
+  uchar *const dbuf_end = net_store_length(current_pos, (size_t)m_dblen_);
+  current_pos = dbuf_end;
+
+  // 写入数据库名
+  memcpy(current_pos, m_dbnam_.c_str(), m_dblen_ + 1);
+  current_pos += m_dblen_ + 1;
+
+  // 写入表名长度
+  uchar *const tbuf_end = net_store_length(current_pos, (size_t)m_tbllen_);
+  current_pos = tbuf_end;
+
+  // 写入表名
+  memcpy(current_pos, m_tblnam_.c_str(), m_tbllen_ + 1);
+  current_pos += m_tbllen_ + 1;
+
+  // 写入列数
+  uchar *const cbuf_end = net_store_length(current_pos, (size_t)m_colcnt_);
+  current_pos = cbuf_end;
+
+  // 写入列类型
+  memcpy(current_pos, m_coltype_.get(), m_colcnt_);
+  current_pos += m_colcnt_;
+
+  // 写入字段元数据大小
+  uchar *const mbuf_end = net_store_length(current_pos, m_field_metadata_size_);
+  current_pos = mbuf_end;
+
+  // 写入字段元数据
+  memcpy(current_pos, m_field_metadata_.get(), m_field_metadata_size_);
+  current_pos += m_field_metadata_size_;
+
+  // 写入空值位图
+  size_t null_bits_len = (m_colcnt_ + 7) / 8;
+  memcpy(current_pos, m_null_bits_.get(), null_bits_len);
+  current_pos += null_bits_len;
+
+  // 返回写入的总字节数
+  return current_pos - buffer;
 }

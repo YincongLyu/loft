@@ -283,7 +283,7 @@ std::future<RC> LogFileManager::transformAsync(std::vector<unsigned char>&& buf,
     size_t current_pending = ++pending_tasks_;
     // 只有当积累了足够的任务或者是DDL任务时才通知消费者
     if (current_pending >= BATCH_SIZE) {
-      task_cond_.notify_one();
+      task_cond_.notify_one(); // 这里 notifiy 的是谁呢？谁在等 task_cond_？
     }
 
     promise->set_value(RC::SUCCESS);
@@ -297,10 +297,19 @@ std::future<RC> LogFileManager::transformAsync(std::vector<unsigned char>&& buf,
 LogFileManager::LogFileManager()
     : file_reader_(std::make_unique<RedoLogFileReader>()),
     file_writer_(std::make_unique<BinLogFileWriter>()),
-    transform_manager_(std::make_unique<LogFormatTransformManager>()){
+    transform_manager_(std::make_unique<LogFormatTransformManager>()),
+    ring_buffer_(std::make_shared<TaskQueue<Task>>(10000)) {
 
-  stop_threads_ = false;
-  consumer_thread_ = std::thread(&LogFileManager::process_tasks, this);
+  // 启动任务收集线程
+  task_collector_threads_.emplace_back(&LogFileManager::process_tasks, this);
+
+  // 初始化线程池
+  init_thread_pool(1,4);
+
+  // 启动专门的写入线程
+  writer_thread_ = std::thread([this] {
+    result_queue_.process_writes(file_writer_.get(), this);
+  });
     // 其他初始化操作可以放在这里，比如加载已有日志文件的索引，设置初始状态等
 }
 
@@ -350,18 +359,45 @@ RC LogFileManager::next_file(BinLogFileWriter &file_writer) {
 }
 
 LogFileManager::~LogFileManager() {
-  // 关闭 index_fd_
+  // 设置停止标志
+  stop_flag_ = true;
+
+  // 2. 等待任务收集线程结束, 现在只有 1 个
+  for (auto& thread : task_collector_threads_) {
+    if (thread.joinable()) {
+      thread.join();
+    }
+  }
+
+  // 3. 关闭线程池，析构会自动调用 shutdown() 和 await_termination()
+  // 但是一定要手动执行这两个函数，否则 索引文件可能会被先关闭，导致写入 索引文件失败
+  if (thread_pool_) {
+    thread_pool_->shutdown();
+  }
+
+  // 确保所有待处理的批次都被处理，等价于 await_termination() 里的等待
+//  {  如果 转换/写入 分离之后，就不用 等待了
+//    std::unique_lock<std::mutex> lock(batch_queue_.mutex_);
+//    while (!batch_queue_.queue_.empty()) {
+//      batch_queue_.queue_.front()->run();
+//      batch_queue_.queue_.pop();
+//    }
+//  }
+  // 等待写入线程结束
+  if (writer_thread_.joinable()) {
+    writer_thread_.join();
+  }
+
+  // 关闭文件写入器
+//  if (file_writer_) {
+//    file_writer_->close();
+//  }
+  // 4. 最后关闭 index_fd_
   if (index_fd_ >= 0) {
     ::close(index_fd_);
     index_fd_ = -1;
   }
-  // 关闭线程
-  stop_threads_ = true;
-  task_cond_.notify_one();  // 通知处理线程退出
-  if (consumer_thread_.joinable()) {
-    consumer_thread_.join();
-  }
-  delete ring_buffer_;
+
 }
 
 RC LogFileManager::write_filename2index(std::string &filename) {
@@ -407,24 +443,23 @@ RC LogFileManager::get_last_status_from_filename(
 }
 
 /**
- * @brief 批处理
+ * @brief 仅用作 任务收集 线程
  */
 void LogFileManager::process_tasks() {
   std::vector<Task> batch_tasks;
   batch_tasks.reserve(BATCH_SIZE);
 
-  while (!stop_threads_) {
+  while (!stop_flag_) {  // 使用stop_flag_替代之前的stop_threads_
     {
       std::unique_lock<std::mutex> lock(task_mutex_);
-      // 等待直到有足够的任务或被通知停止
-      task_cond_.wait(lock, [this] {
-        return stop_threads_ || pending_tasks_ >= BATCH_SIZE ||
-               (pending_tasks_ > 0);
-      });
+      task_cond_.wait_for(lock,
+          std::chrono::milliseconds(100),  // 添加超时以便定期检查stop_flag_
+          [this] {
+            return stop_flag_ || pending_tasks_ >= BATCH_SIZE;
+          });
 
-      if (stop_threads_ && pending_tasks_ == 0) break;
+      if (stop_flag_ && pending_tasks_ == 0) break;
 
-      // 批量读取任务
       size_t tasks_to_read = std::min(pending_tasks_.load(), BATCH_SIZE);
       for (size_t i = 0; i < tasks_to_read; ++i) {
         Task task;
@@ -435,23 +470,24 @@ void LogFileManager::process_tasks() {
       }
     }
 
-    // 批量处理任务
-    for (const auto& task : batch_tasks) {
-      if (!file_writer_->get_binlog()->remain_bytes_safe()) {
-        this->next_file(*file_writer_);
-      }
-
-      if (task.is_ddl_) {
-        const DDL* ddl = GetDDL(task.data_.data());
-        file_ckp_[last_file_no_] = ddl->check_point()->c_str();
-        transform_manager_->transformDDL(ddl, file_writer_->get_binlog());
-      } else {
-        const DML* dml = GetDML(task.data_.data());
-        file_ckp_[last_file_no_] = dml->check_point()->c_str();
-        transform_manager_->transformDML(dml, file_writer_->get_binlog());
-      }
+    if (!batch_tasks.empty()) {
+      auto processor = std::make_unique<BatchProcessor>(
+          this,
+          std::move(batch_tasks),
+          batch_sequence_++);
+      batch_queue_.add_batch(std::move(processor));
+      batch_tasks.clear();
     }
-
-    batch_tasks.clear();
   }
+}
+
+void LogFileManager::init_thread_pool(int core_size, int max_size) {
+  thread_pool_ = std::make_unique<ThreadPoolExecutor>();
+  thread_pool_->init("LogProcessor", core_size, max_size, 1000);
+
+  batch_queue_.stop_flag_ = &stop_flag_;  // 设置BatchQueue的stop_flag_指针
+  result_queue_.stop_flag_ = &stop_flag_;  // 设置ResultQueue的stop_flag_指针
+
+  thread_pool_->execute([this] { batch_queue_.process_batches(); });
+
 }

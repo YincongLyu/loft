@@ -60,6 +60,8 @@ Query_event::Query_event(const char *query_arg, const char *catalog_arg, const c
   query_exec_time_ = EXEC_TIME;
   LOG_INFO("db_len_ = %zu, query_len = %zu", db_len_, q_len_);
 
+  calculate_status_vars_len();
+
   time_t i_ts          = static_cast<time_t>(immediate_commit_timestamp_arg / 1000000);
   this->common_header_ = std::make_unique<EventCommonHeader>(i_ts);
   //  this->common_header_ = std::make_unique<EventCommonHeader>(immediate_commit_timestamp_arg);
@@ -227,4 +229,136 @@ cal_status_var:
          ostream->write(start_of_status, (uint)(start - start_of_status)) &&
          ostream->write(db_ ? pointer_cast<const uchar *>(db_) : pointer_cast<const uchar *>(""), db_len_ + 1) &&
          ostream->write(pointer_cast<const uchar *>(query_), q_len_);
+}
+
+size_t Query_event::write_data_header_to_buffer(uchar* buffer) {
+  // 写入 Query 事件固定头部
+  int4store(buffer + Q_THREAD_ID_OFFSET, thread_id_);
+  int4store(buffer + Q_EXEC_TIME_OFFSET, query_exec_time_);
+  buffer[Q_DB_LEN_OFFSET] = (unsigned char)db_len_;
+  int2store(buffer + Q_ERR_CODE_OFFSET, error_code_);
+
+  return AbstractEvent::QUERY_HEADER_LEN;
+}
+
+size_t Query_event::write_data_body_to_buffer(uchar* buffer) {
+  uchar* current_pos = buffer;
+  uchar* start_of_status = current_pos;
+
+  // 写入状态变量
+  if (ddl_xid != INVALID_XID) {
+    if (flags2_inited) {
+      *current_pos++ = Q_FLAGS2_CODE;
+      int4store(current_pos, flags2);
+      current_pos += 4;
+    }
+    if (sql_mode_inited) {
+      *current_pos++ = Q_SQL_MODE_CODE;
+      int8store(current_pos, sql_mode);
+      current_pos += 8;
+    }
+    if (catalog_len) {
+      write_str_with_code_and_len(&current_pos, catalog_, catalog_len, Q_CATALOG_NZ_CODE);
+    }
+
+    if (auto_increment_increment != 1 || auto_increment_offset != 1) {
+      *current_pos++ = Q_AUTO_INCREMENT;
+      int2store(current_pos, static_cast<uint16_t>(auto_increment_increment));
+      int2store(current_pos + 2, static_cast<uint16_t>(auto_increment_offset));
+      current_pos += 4;
+    }
+    if (charset_inited) {
+      *current_pos++ = Q_CHARSET_CODE;
+      int2store(current_pos, client_charset_);
+      int2store(current_pos + 2, connection_collation_);
+      int2store(current_pos + 4, server_collation_);
+      current_pos += 6;
+    }
+    if (time_zone_len) {
+      write_str_with_code_and_len(&current_pos, time_zone_str_, time_zone_len, Q_TIME_ZONE_CODE);
+    }
+    if (lc_time_names_number) {
+      *current_pos++ = Q_LC_TIME_NAMES_CODE;
+      int2store(current_pos, lc_time_names_number);
+      current_pos += 2;
+    }
+    if (charset_database_number) {
+      *current_pos++ = Q_CHARSET_DATABASE_CODE;
+      int2store(current_pos, charset_database_number);
+      current_pos += 2;
+    }
+    if (table_map_for_update) {
+      *current_pos++ = Q_TABLE_MAP_FOR_UPDATE_CODE;
+      int8store(current_pos, table_map_for_update);
+      current_pos += 8;
+    }
+
+    // 写入数据库名
+    if (db_ != nullptr) {
+      *current_pos++ = Q_UPDATED_DB_NAMES;
+      *current_pos++ = 254;  // 数据库数量
+      strcpy((char*)current_pos, db_);
+      current_pos += strlen(db_) + 1;
+    } else {
+      *current_pos++ = 254;
+    }
+
+    if (query_start_usec_used_) {
+      *current_pos++ = Q_MICROSECONDS;
+      int3store(current_pos, common_header_->timestamp_ % 1000000);
+      current_pos += 3;
+    }
+
+    if (ddl_xid != INVALID_XID) {
+      *current_pos++ = Q_DDL_LOGGED_WITH_XID;
+      int8store(current_pos, ddl_xid);
+      current_pos += 8;
+    }
+
+    if (default_collation_for_utf8mb4_number_) {
+      *current_pos++ = Q_DEFAULT_COLLATION_FOR_UTF8MB4;
+      int2store(current_pos, default_collation_for_utf8mb4_number_);
+      current_pos += 2;
+    }
+  }
+
+  // 更新状态变量长度
+  status_vars_len_ = current_pos - start_of_status;
+  int2store(buffer - AbstractEvent::QUERY_HEADER_LEN + Q_STATUS_VARS_LEN_OFFSET, status_vars_len_);
+
+  // 写入数据库名
+  if (db_) {
+    memcpy(current_pos, db_, db_len_);
+  }
+  current_pos += db_len_;
+  *current_pos++ = 0;  // 数据库名结束符
+
+  // 写入查询语句
+  memcpy(current_pos, query_, q_len_);
+  current_pos += q_len_;
+
+  return current_pos - buffer;
+}
+
+void Query_event::calculate_status_vars_len() {
+  size_t len = 0;
+
+  if (ddl_xid != INVALID_XID) {
+    if (flags2_inited) len += 1 + 4;
+    if (sql_mode_inited) len += 1 + 8;
+    if (catalog_len) len += 1 + catalog_len;
+    if (auto_increment_increment != 1 || auto_increment_offset != 1) len += 1 + 4;
+    if (charset_inited) len += 1 + 6;
+    if (time_zone_len) len += 1 + time_zone_len;
+    if (lc_time_names_number) len += 1 + 2;
+    if (charset_database_number) len += 1 + 2;
+    if (table_map_for_update) len += 1 + 8;
+    if (db_) len += 2 + strlen(db_) + 1;
+    else len += 1;
+    if (query_start_usec_used_) len += 1 + 3;
+    if (ddl_xid != INVALID_XID) len += 1 + 8;
+    if (default_collation_for_utf8mb4_number_) len += 1 + 2;
+  }
+
+  status_vars_len_ = len;
 }

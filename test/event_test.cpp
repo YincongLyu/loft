@@ -7,6 +7,7 @@
 #include "statement_events.h"
 #include "write_event.h"
 #include "table_id.h"
+#include "my_json.h"
 
 #include "logging.h"
 #include "macros.h"
@@ -293,9 +294,10 @@ TEST(EVENT_FORMAT_TEST, ROWS_EVENT) {
     const char *test_file_name = "test_rows";
     uint64_t test_file_size = 1024;
     std::string str = "03:22:00";
+    std::string s = "{\"deptName\": \"部门1\", \"deptId\": \"1\", \"deptLeaderId\": \"3\"}";
     int num = 2;
     std::string type = "INT";
-    std::string type2 = "TIME";
+    std::string type2 = "JSON";
     if (!binlog.open(test_file_name, test_file_size)) {
         std::cerr << "Failed to open binlog file." << std::endl;
     }
@@ -304,7 +306,7 @@ TEST(EVENT_FORMAT_TEST, ROWS_EVENT) {
     row.set_rows_after(after_rows);
     row.set_null_after(after_null);
     row.set_null_before(before_null);
-    row.write_data_after(str.data(),type2,0,str.size());
+    row.write_data_after(s.data(),type2,0,s.size());
     Format_description_event fde(4, "8.0.26");
     binlog.write_event_to_binlog(&fde);
     binlog.write_event_to_binlog(&row);

@@ -22,8 +22,6 @@ constexpr const int MONS_PER_YEAR = 12;
 constexpr const int MAX_TIME_ZONE_HOURS = 14;
 #define MAX_DATE_PARTS 8
 
-
-
 const ulonglong log_10_int[20] = {1,
                                   10,
                                   100,
@@ -615,4 +613,20 @@ void datetime_to_timeval(const MYSQL_TIME *ltime, my_timeval *tm) {
   int64_t not_used;
   tm->m_tv_sec = my_system_gmt_sec(*ltime, &not_used);
   tm->m_tv_usec = ltime->second_part;
+}
+
+longlong TIME_to_longlong_packed(const MYSQL_TIME &my_time){
+  switch (my_time.time_type) {
+    case MYSQL_TIMESTAMP_DATETIME_TZ:
+      assert(false);  // Should not be this type at this point.
+    case MYSQL_TIMESTAMP_DATETIME:
+      return TIME_to_longlong_datetime_packed(my_time);
+    case MYSQL_TIMESTAMP_TIME:
+      return TIME_to_longlong_time_packed(my_time);
+    case MYSQL_TIMESTAMP_NONE:
+    case MYSQL_TIMESTAMP_ERROR:
+      return 0;
+  }
+  assert(false);
+  return 0;
 }

@@ -1,6 +1,12 @@
+#ifndef LOFT_DEMICAL_H
+#define LOFT_DEMICAL_H
+
 #include "little_endian.h"
 #include <limits>
 #include <type_traits>
+
+#define DECIMAL_MAX_FIELD_SIZE 65
+
 
 static const int dig2bytes[DIG_PER_DEC1 + 1] = {0, 1, 1, 2, 2, 3, 3, 4, 4, 4};
 static const dec1 powers10[DIG_PER_DEC1 + 1] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000};
@@ -118,4 +124,21 @@ static inline dec1 *remove_leading_zeroes(const decimal_t *from,
 int decimal2bin(const decimal_t *from, uchar *to, int precision, int frac) ;
 
 
+inline static int decimal_bin_size_inline(int precision, int scale) {
+  int intg = precision - scale, intg0 = intg / DIG_PER_DEC1,
+      frac0 = scale / DIG_PER_DEC1, intg0x = intg - intg0 * DIG_PER_DEC1,
+      frac0x = scale - frac0 * DIG_PER_DEC1;
+
+  assert(scale >= 0 && precision > 0 && scale <= precision);
+  assert(intg0x >= 0);
+  assert(intg0x <= DIG_PER_DEC1);
+  assert(frac0x >= 0);
+  assert(frac0x <= DIG_PER_DEC1);
+  return intg0 * sizeof(dec1) + dig2bytes[intg0x] + frac0 * sizeof(dec1) +
+         dig2bytes[frac0x];
+}
+
+int decimal_bin_size(int precision, int scale);
+
+#endif
 

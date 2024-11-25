@@ -1,3 +1,7 @@
+
+#ifndef LOFT_MY_TIME_H
+#define LOFT_MY_TIME_H
+
 #include <assert.h>
 #include "little_endian.h"
 #include <limits>
@@ -75,3 +79,7 @@ void str_to_time(const char *str, std::size_t length, MYSQL_TIME *l_time);
 void str_to_datetime(const char *const str_arg, std::size_t length, MYSQL_TIME *l_time);
 
 void datetime_to_timeval(const MYSQL_TIME *ltime, my_timeval *tm);
+
+longlong TIME_to_longlong_packed(const MYSQL_TIME &my_time);
+
+#endif

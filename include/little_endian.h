@@ -6,6 +6,7 @@
 #define LOFT_LITTLE_ENDIAN_H
 #include "constants.h"
 #include <type_traits>
+#include <iostream>
 using namespace loft;
 
 typedef unsigned char uchar;
@@ -35,6 +36,12 @@ typedef long long int longlong;
 #define ROWS_VHLEN_OFFSET 8
 #define EXTRA_ROW_INFO_TYPECODE_LENGTH 1
 #define EXTRA_ROW_PART_INFO_VALUE_LENGTH 2
+#define INT_MIN16 (~0x7FFF)
+#define INT_MAX16 0x7FFF
+#define INT_MIN32 (~0x7FFFFFFFL)
+#define INT_MAX32 0x7FFFFFFFL
+#define UINT_MAX16 0xFFFF
+#define UINT_MAX32 0xFFFFFFFFL
 
 
 using dec1 = int32;
@@ -180,6 +187,11 @@ static void set_N_bit(uchar &f, int N) {
     mi_int4store((uchar *)(T) + 0, def_temp4);                    \
     mi_int4store((uchar *)(T) + 4, def_temp3);                    \
   }
+
+static inline void float8store(uchar *V, double M) {
+  memcpy(V, &M, sizeof(double));
+}
+
 
 
 #endif // LOFT_LITTLE_ENDIAN_H

@@ -112,4 +112,6 @@ int decimal2bin(const decimal_t *from, uchar *to, int precision, int frac) {
   return error;
 }
 
-
+int decimal_bin_size(int precision, int scale) {
+  return decimal_bin_size_inline(precision, scale);
+}

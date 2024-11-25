@@ -11,6 +11,7 @@
 #include "demical.h"
 #include "field_types.h"
 #include "my_time.h"
+#include "my_json.h"
 
 class Rows_event : public AbstractEvent{
 public :
@@ -144,7 +145,7 @@ public :
       data_size += enum_size;
       break;
     }
-    case enum_field_types::MYSQL_TYPE_SET :{
+    case enum_field_types::MYSQL_TYPE_SET : {
       size_t set_size;
       if(length >= 1 && length <= 8) {
         set_size = 1;
@@ -162,7 +163,7 @@ public :
       data_size += set_size;
       break;
     }
-    case enum_field_types::MYSQL_TYPE_BIT :{
+    case enum_field_types::MYSQL_TYPE_BIT : {
     size_t bit_size;
     bit_size = (length + 7) / 9;
     buf_resize(buf, data_size, data_size + bit_size);
@@ -170,7 +171,7 @@ public :
     data_size += bit_size;
       break;
     }
-    case enum_field_types::MYSQL_TYPE_STRING :{
+    case enum_field_types::MYSQL_TYPE_STRING : {
       size_t char_size = 0;
       if(length > 255) {
         char_size = 2;
@@ -198,8 +199,15 @@ public :
       data_size += str_length;
       break;
     }
-    case enum_field_types::MYSQL_TYPE_JSON :
+    case enum_field_types::MYSQL_TYPE_JSON : {
+      Json_dom_ptr json_ptr = Json_dom::parse(data,str_length);
+      std::string dest;
+      json2bin(json_ptr.get(),&dest);
+      buf_resize(buf, data_size, data_size + dest.size() + 4);
+      store_json_binary(dest.c_str(), dest.size(), buf);
+      data_size += dest.size() + 4;
       break;
+    }
     case enum_field_types::MYSQL_TYPE_TIME : {
       size_t time_size = 3;
       MYSQL_TIME ltime;

@@ -1,6 +1,3 @@
 [submodule "deps/googletest"]
 	path = deps/googletest
 	url = https://github.com/google/googletest.git
-[submodule "deps/date"]
-	path = deps/date
-	url = git@github.com:HowardHinnant/date.git

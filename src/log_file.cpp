@@ -91,7 +91,12 @@ RC BinLogFileWriter::open(const char *filename, size_t max_file_size)
     // 这里仅是 初始化了文件信息，还没有 open 文件流
     RC ret;
     bin_log_ = std::make_unique<MYSQL_BIN_LOG>(filename, max_file_size, ret);
-    LOFT_VERIFY(ret != RC::SUCCESS, "Failed to create binlog file.");
+    // 确保 open 失败时返回错误，而不是继续运行
+    if (ret != RC::SUCCESS || bin_log_ == nullptr) {
+      LOG_ERROR("Failed to create binlog file: %s", filename);
+      bin_log_.reset();  // 确保指针清空
+      return RC::FILE_OPEN;
+    }
     // 直接返回 当前文件的 可写位置，相当于继续写
     return bin_log_->open(); // 正确返回 RC::SUCCESS
 }
@@ -294,6 +299,19 @@ std::future<RC> LogFileManager::transformAsync(std::vector<unsigned char>&& buf,
   return future;
 }
 
+std::future<RC> LogFileManager::transformAsync2(std::vector<unsigned char>&& buf, bool is_ddl) {
+  auto promise = std::make_shared<std::promise<RC>>();
+  auto future = promise->get_future();
+
+  // 将任务直接放入预加载任务队列
+  preload_tasks({Task(std::move(buf), is_ddl)});
+
+  // 不再显式通知 `process_tasks`
+  promise->set_value(RC::SUCCESS);
+  return future;
+}
+
+
 LogFileManager::LogFileManager()
     : file_reader_(std::make_unique<RedoLogFileReader>()),
     file_writer_(std::make_unique<BinLogFileWriter>()),
@@ -301,15 +319,16 @@ LogFileManager::LogFileManager()
     ring_buffer_(std::make_shared<TaskQueue<Task>>(10000)) {
 
   // 启动任务收集线程
-  task_collector_threads_.emplace_back(&LogFileManager::process_tasks, this);
+//  task_collector_threads_.emplace_back(&LogFileManager::process_tasks2, this);
+
 
   // 初始化线程池
-  init_thread_pool(1,4);
-
-  // 启动专门的写入线程
-  writer_thread_ = std::thread([this] {
-    result_queue_.process_writes(file_writer_.get(), this);
-  });
+//  init_thread_pool(1,4);
+//
+//  // 启动专门的写入线程
+//  writer_thread_ = std::thread([this] {
+//    result_queue_.process_writes(file_writer_.get(), this);
+//  });
     // 其他初始化操作可以放在这里，比如加载已有日志文件的索引，设置初始状态等
 }
 
@@ -359,11 +378,14 @@ RC LogFileManager::next_file(BinLogFileWriter &file_writer) {
 }
 
 LogFileManager::~LogFileManager() {
-
-  // 4. 最后关闭 index_fd_
-  if (index_fd_ >= 0) {
-    ::close(index_fd_);
-    index_fd_ = -1;
+  try {
+    // 4. 最后关闭 index_fd_
+    if (index_fd_ >= 0) {
+      ::close(index_fd_);
+      index_fd_ = -1;
+    }
+  } catch (const std::exception& e) {
+    LOG_ERROR("Exception in ~LogFileManager: %s", e.what());
   }
 
 }
@@ -479,6 +501,40 @@ void LogFileManager::process_tasks() {
   }
 }
 
+void LogFileManager::process_tasks2() {
+  std::vector<Task> batch_tasks;
+  batch_tasks.reserve(BATCH_SIZE);
+
+  while (!stop_flag_) {
+    try {
+      {
+        std::unique_lock<std::mutex> lock(preload_mutex_);
+        task_cond_.wait(lock, [this] {
+          return preloading_done_ || stop_flag_;
+        });
+
+        if (stop_flag_ && preloaded_tasks_.empty()) break;
+
+        // 从预加载任务队列中取出一批任务
+        for (int i = 0; i < BATCH_SIZE && !preloaded_tasks_.empty(); ++i) {
+          batch_tasks.push_back(std::move(preloaded_tasks_.back()));
+          preloaded_tasks_.pop_back();
+        }
+      }
+
+      if (!batch_tasks.empty()) {
+        auto processor = std::make_unique<BatchProcessor>(
+            this, std::move(batch_tasks), batch_sequence_++);
+        batch_queue_.add_batch(std::move(processor));
+        batch_tasks.clear();
+      }
+    } catch (const std::exception& e) {
+      LOG_ERROR("Exception in process_tasks: %s", e.what());
+    }
+  }
+}
+
+
 void LogFileManager::init_thread_pool(int core_size, int max_size) {
   thread_pool_ = std::make_unique<ThreadPoolExecutor>();
   thread_pool_->init("LogProcessor", core_size, max_size, 1000);
@@ -492,36 +548,59 @@ void LogFileManager::init_thread_pool(int core_size, int max_size) {
 
 void LogFileManager::shutdown() {
   if (!stop_flag_) {
+
+    LOG_DEBUG("use thread max num: %d", thread_pool_->largest_pool_size());
     stop_flag_ = true;
 
     // 通知所有等待线程
-    task_cond_.notify_all();
-    batch_queue_.cv_.notify_all();
-    result_queue_.cv_.notify_all();
+//    task_cond_.notify_all();
+//    batch_queue_.cv_.notify_all();
+    result_queue_.cv_.notify_one();
 
     for (auto& thread : task_collector_threads_) {
       if (thread.joinable()) thread.join();
     }
-    if (thread_pool_) thread_pool_->shutdown();
+
+    while (!batch_queue_.queue_.empty()) {
+      LOG_DEBUG("Waiting for batch_queue_ to be empty...");
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    // 等待所有写入任务完成
+    while (!result_queue_.pending_results_.empty()) {
+      LOG_DEBUG("Waiting for pending_results_ to be empty...");
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+//    if (thread_pool_) {
+//      thread_pool_->shutdown();
+//      thread_pool_->await_termination();
+//    }
     if (writer_thread_.joinable()) writer_thread_.join();
 
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - start_time_).count();
+    LOG_DEBUG("====Total execution time: %ld ms", duration);
+
+    LOG_INFO("All threads joined, progress:");
+    LOG_DEBUG("show progress in shutdown......");
     log_progress();
   }
 }
 void LogFileManager::wait_for_completion() {
-  LOG_DEBUG("Waiting for all tasks to complete...");
+  LOG_DEBUG("Waiting for all write tasks to complete...");
 
   // 等待所有任务进入批次队列
-  while (pending_tasks_ > 0) {
-//    LOG_DEBUG("Pending tasks: %zu", pending_tasks_.load());
-    std::this_thread::sleep_for(std::chrono::milliseconds(10)); // 等待短暂时间后重试
-  }
-
-  // 等待所有批次任务完成
-  while (!batch_queue_.queue_.empty()) {
-//    LOG_DEBUG("Batch queue not empty. Remaining batches: %zu", batch_queue_.queue_.size());
-    std::this_thread::sleep_for(std::chrono::milliseconds(10)); // 等待短暂时间后重试
-  }
+//  while (pending_tasks_ > 0) {
+////    LOG_DEBUG("Pending tasks: %zu", pending_tasks_.load());
+//    std::this_thread::sleep_for(std::chrono::milliseconds(10)); // 等待短暂时间后重试
+//  }
+//
+//  // 等待所有批次任务完成
+//  while (!batch_queue_.queue_.empty()) {
+////    LOG_DEBUG("Batch queue not empty. Remaining batches: %zu", batch_queue_.queue_.size());
+//    std::this_thread::sleep_for(std::chrono::milliseconds(10)); // 等待短暂时间后重试
+//  }
 
   // 等待写入队列完成
   {
@@ -534,4 +613,44 @@ void LogFileManager::wait_for_completion() {
 
   LOG_DEBUG("All tasks and writes completed.");
 }
+void LogFileManager::preload_tasks(const std::vector<Task> &tasks) {
+  try {
+    {
+//      std::lock_guard<std::mutex> lock(preload_mutex_);
+      preloaded_tasks_ = tasks;  // 复制所有任务
+    }
+//    preloading_done_ = true;       // 标记预加载完成
+//    task_cond_.notify_all();       // 通知 `process_tasks` 开始处理
+  } catch (const std::exception& e) {
+    LOG_ERROR("Exception during preload_tasks: %s", e.what());
+    throw;  // 重新抛出异常
+  }
 
+  std::vector<Task> batch_tasks;
+  batch_tasks.reserve(BATCH_SIZE);
+  while (!preloaded_tasks_.empty()) {
+    // 从预加载任务队列中取出一批任务
+    for (int i = 0; i < BATCH_SIZE && !preloaded_tasks_.empty(); ++i) {
+      batch_tasks.push_back(std::move(preloaded_tasks_.back()));
+      preloaded_tasks_.pop_back();
+    }
+    // 准备好 preloaded_tasks_ 后马上就可以初始化 batch_queue_，从这里开始计时
+    if (!batch_tasks.empty()) {
+      auto processor = std::make_unique<BatchProcessor>(
+          this, std::move(batch_tasks), batch_sequence_++);
+      batch_queue_.add_batch(std::move(processor));
+      batch_tasks.clear();
+    }
+  }
+
+  // 1. 开始计时点移到这里
+  start_time_ = std::chrono::high_resolution_clock::now();
+  // 2. 接着启动 转换 + 写入 工作线程
+  init_thread_pool(2,4);
+
+  // 启动专门的写入线程
+  writer_thread_ = std::thread([this] {
+    result_queue_.process_writes(file_writer_.get(), this);
+  });
+
+}

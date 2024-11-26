@@ -22,8 +22,8 @@ if(NDEBUG)
         -DEVMONE_X86_64_ARCH_LEVEL=2
     )
 else()
-    add_compile_options(-fsanitize=address)
-    add_link_options(-fsanitize=address)
+#    add_compile_options(-fsanitize=address)
+#    add_link_options(-fsanitize=address)
     add_compile_options(
         -O0 -ggdb -Werror -Wno-attributes
         -DPROJECT_VERSION=""
@@ -38,6 +38,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # -- Includes
 include_directories(${PROJECT_SOURCE_DIR}/include)
+#include_directories(${PROJECT_SOURCE_DIR}/deps/date/include)
 #INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/deps /usr/local/common/include/deps)
 
 # -- third Libraries

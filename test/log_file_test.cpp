@@ -162,7 +162,7 @@ TEST(THROUPUT_TEST, PRELOAD_TASK) {
   reader.forward(reader.read<uint32_t>());  // 跳过一条数据
 
   int DMLEPOCH = 703435;
-//  int DMLEPOCH = 1000;
+  //  int DMLEPOCH = 1000;
   for (int i = 0; i < DMLEPOCH; ++i) {
     uint32_t dml_len = reader.read<uint32_t>();
     std::vector<unsigned char> dml_buf(dml_len);
@@ -187,7 +187,9 @@ TEST(THROUPUT_TEST, PRELOAD_TASK) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 
+  LOG_DEBUG("finish transform all sql to buffer, and save in ResultQueue....");
+  logFileManager->log_progress();
 
   // 最后再shutdown，但此时 ResultQueue里的内容可能还没有被 write 线程 处理完
-  logFileManager->shutdown(endPreloadTaskTime);
+  logFileManager->shutdown();
 }

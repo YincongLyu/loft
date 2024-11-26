@@ -12,7 +12,7 @@
 int main()
 {
 
-  std::string filename = "/home/yincong/loft/testDataDir/data";
+  std::string filename = "/home/yincong/loft/testDataDir/data1";
   // 1. 创建一个 LogFileManager 对象，获得 3 个必要对象, 一定是这样子的调用过程
   auto logFileManager = std::make_unique<LogFileManager>();
   logFileManager->init(DEFAULT_BINLOG_FILE_DIR, DEFAULT_BINLOG_FILE_NAME_PREFIX, DEFAULT_BINLOG_FILE_SIZE);
@@ -34,7 +34,6 @@ int main()
   auto fileWriter = logFileManager->get_file_writer();
   logFileManager->last_file(*fileWriter);  // fileWrite 自动写下一个文件了，而且也打开了文件流了
 
-  auto startTime = std::chrono::high_resolution_clock::now();  // 记录开始时间
 
   std::vector<std::future<RC>> futures;  // 存储所有的future
 
@@ -67,12 +66,15 @@ int main()
     }
   }
 
+  auto startTime = std::chrono::high_resolution_clock::now();  // 记录开始时间
+
   // 中途查询进度
+  LOG_DEBUG("test show process......");
   logFileManager->log_progress();
 
-  // main 函数最后部分，添加显式等待
-  logFileManager->wait_for_completion(); // 确保所有任务完成
-  logFileManager->shutdown();            // 显式关闭资源
+  // main 函数最后部分，添加显式等待，如果等待 转换的任务执行完，就不用显示调用
+//  logFileManager->wait_for_completion(); // 确保所有任务完成
+//  logFileManager->shutdown();            // 显式关闭资源
 
   // 测试 API 3, 查询 ON.000001 文件的 scn，seq，ckp
   uint64 scn = 0;
@@ -84,4 +86,5 @@ int main()
   auto dmlEndTime = std::chrono::high_resolution_clock::now();  // 记录结束时间
   duration        = std::chrono::duration_cast<std::chrono::milliseconds>(dmlEndTime - readFileEndTime).count();
   LOG_DEBUG("DML transform execution time: %ld ms", duration);
+
 }

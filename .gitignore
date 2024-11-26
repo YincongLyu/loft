@@ -64,3 +64,6 @@ CTestTestfile.cmake
 # script tools 
 format_count.sh
 build.sh
+
+# data
+./testDataDir

@@ -2,6 +2,8 @@
 // Created by Coonger on 2024/11/14.
 //
 
+#pragma once
+
 #include <cstddef>
 #include <cstdint>
 #include <cstring>

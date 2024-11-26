@@ -119,6 +119,7 @@ public:
    */
   RC transform(std::vector<unsigned char> &&buf, bool is_ddl);
   std::future<RC> transformAsync(std::vector<unsigned char> &&buf, bool is_ddl);
+  std::future<RC> transformAsync2(std::vector<unsigned char> &&buf, bool is_ddl);
 
       /// 接口三：
   /**
@@ -182,7 +183,7 @@ public:
         : manager_(manager), tasks_(std::move(tasks)), batch_sequence_(sequence) {}
 
     void run() override {
-      auto result = std::make_shared<BatchResult>(batch_sequence_);
+      auto result = std::make_unique<BatchResult>(batch_sequence_);
 
       for (const auto& task : tasks_) {
         if (task.is_ddl_) {
@@ -210,7 +211,7 @@ public:
       }
 
       // 将结果加入写入队列
-      manager_->result_queue_.add_result(result);
+      manager_->result_queue_.add_result(std::move(result));
 
       manager_->processed_tasks_ += tasks_.size();
     }
@@ -287,14 +288,14 @@ public:
   struct ResultQueue {
     std::mutex mutex_;
     std::condition_variable cv_;
-    std::unordered_map<size_t, std::shared_ptr<BatchResult>> pending_results_;
+    std::unordered_map<size_t, std::unique_ptr<BatchResult>> pending_results_;
     size_t next_write_sequence_{0};
     std::atomic<bool>* stop_flag_;
 
 
-    void add_result(std::shared_ptr<BatchResult> result) {
+    void add_result(std::unique_ptr<BatchResult> result) {
       std::lock_guard<std::mutex> lock(mutex_);
-      pending_results_[result->sequence] = result;
+      pending_results_[result->sequence] = std::move(result);
       // 只有当下一个期望序号的结果到达时才通知
       if (pending_results_.count(next_write_sequence_) > 0) {
         cv_.notify_one();
@@ -304,7 +305,7 @@ public:
     // 专门的文件写入线程
     void process_writes(BinLogFileWriter* writer, LogFileManager* manager) {
       while (!(*stop_flag_)) {
-        std::shared_ptr<BatchResult> result;
+        std::unique_ptr<BatchResult> result;
         {
           std::unique_lock<std::mutex> lock(mutex_);
           if (cv_.wait_for(lock,
@@ -317,8 +318,9 @@ public:
               break;
             }
             if (pending_results_.count(next_write_sequence_) > 0) {
-              result = pending_results_[next_write_sequence_];
+              result = std::move(pending_results_[next_write_sequence_]);
               pending_results_.erase(next_write_sequence_);
+              next_write_sequence_++;
             }
           }
         }
@@ -330,18 +332,22 @@ public:
           std::lock_guard<std::mutex> write_lock(manager->writer_mutex_);
           for (auto& data : result->transformed_data) {
             // 切换文件
-//            if (!writer->get_binlog()->remain_bytes_safe()) {
-//              manager->next_file(*writer);
-//            }
+            if (!writer->get_binlog()->remain_bytes_safe()) {
+              manager->next_file(*writer);
+            }
 
             // 写入实际数据, 填充 common_header 中的 log_pos 字段
+            if (writer->get_binlog() == nullptr) {
+              LOG_ERROR("bin_log_ is not initialized.");
+              return;
+            }
+
             uint64_t current_pos = writer->get_binlog()->get_bytes_written();
             uint64_t next_pos = current_pos + data.size();
             int4store(data.data() + LOG_POS_OFFSET, next_pos);
 
             writer->get_binlog()->write(data.data(), data.size());
           }
-          next_write_sequence_++;
         }
       }
     }
@@ -358,8 +364,16 @@ public:
   }
 
   void shutdown();
+
+  void preload_tasks(const std::vector<Task>& tasks); // 预加载任务
+  size_t get_processed_sql_num() const {
+    return processed_tasks_.load(std::memory_order_relaxed);
+  }
+
+
 private:
   void process_tasks();
+  void process_tasks2();
   void init_thread_pool(int core_size, int max_size);
 
 
@@ -401,9 +415,16 @@ private:
   ResultQueue result_queue_;
   std::thread writer_thread_;  // 专门的写入线程
 
+  // 追踪进度
   std::atomic<size_t> processed_tasks_{0};
   std::atomic<size_t> written_tasks_{0};
 
+  // 预加载 version
+  std::vector<Task> preloaded_tasks_;   // 预加载的 SQL 任务队列
+  std::atomic<bool> preloading_done_;  // 标志是否完成预加载
+  std::mutex preload_mutex_;
+
+  std::chrono::time_point<std::chrono::high_resolution_clock> start_time_;
 };
 
 

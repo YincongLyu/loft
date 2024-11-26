@@ -448,6 +448,8 @@ TEST(DML_TEST, INSERT2) {
 
   auto originalCommitTs = dml->tx_time();
   EXPECT_STREQ(originalCommitTs->c_str(), "2024-08-01 14:32:39.000238");
+
+  free(dst);
 }
 
 /**

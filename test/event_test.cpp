@@ -19,7 +19,7 @@
  * @brief 打开一个 binlog 文件， 如果有内容，则不会写入 magic number 和 fde 事件
  *          测试 last_file()
  */
-TEST(WRITE_BINLOG_FILE_TEST, OPEN_LAST_FILE) {
+TEST(CONTROL_EVENT_FORMAT_TEST, OPEN_LAST_FILE_FDE) {
 
     auto logFileManager = std::make_unique<LogFileManager>();
     logFileManager->init(DEFAULT_BINLOG_FILE_DIR, DEFAULT_BINLOG_FILE_NAME_PREFIX, DEFAULT_BINLOG_FILE_SIZE);
@@ -46,9 +46,9 @@ TEST(WRITE_BINLOG_FILE_TEST, OPEN_LAST_FILE) {
 
 /**
  * @brief 打开一个 binlog 文件， 如果是一个新的，则会自动写入 magic number 和 fde 事件
- *          测试 next_file()
+ *          测试 next_file()，并且可以看到 ON.000001 这个文件的末尾有写入 rotate event
  */
-TEST(WRITE_BINLOG_FILE_TEST, OPEN_NEXT_FILE) {
+TEST(CONTROL_EVENT_FORMAT_TEST, OPEN_NEXT_FILE_ROTATE) {
 
   auto logFileManager = std::make_unique<LogFileManager>();
   logFileManager->init(DEFAULT_BINLOG_FILE_DIR, DEFAULT_BINLOG_FILE_NAME_PREFIX, DEFAULT_BINLOG_FILE_SIZE);
@@ -79,34 +79,8 @@ TEST(CONTROL_EVENT_FORMAT_TEST, FORMAT_DESCRIPTION_EVENT) {
     ret = binlog->open();
     LOFT_VERIFY(ret != RC::SUCCESS, "Failed to open binlog file");
 
-    auto fde = std::make_unique<Format_description_event>(4, "8.0.26");
+    auto fde = std::make_unique<Format_description_event>(4, "8.0.32-debug");
     binlog->write_event_to_binlog(fde.get());
-
-    binlog->close();
-}
-
-/**
- * @brief [Only] 内部测试，本来想着，可能新建一个文件还会有 previous gtid event
- */
-TEST(CONTROL_EVENT_FORMAT_TEST, DISABLED_OPEN_NEW_BINLOG) {
-    const char *test_file_name = "test_2_default_event";
-    uint64_t test_file_size = 1024;
-
-    RC ret;
-    auto binlog = std::make_unique<MYSQL_BIN_LOG>(test_file_name, test_file_size, ret);
-    LOFT_VERIFY(ret != RC::FILE_CREATE, "Failed to create binlog file.");
-
-    ret = binlog->open();
-    LOFT_VERIFY(ret != RC::FILE_OPEN, "Failed to open binlog file");
-
-    auto fde = std::make_unique<Format_description_event>(4, "8.0.26");
-
-    const Gtid_set *gtid_set = new Gtid_set(new Sid_map());
-    auto pge = std::make_unique<Previous_gtids_event>(gtid_set);
-
-    binlog->write_event_to_binlog(fde.get());
-    std::cout << "write fde successfully." << std::endl;
-    binlog->write_event_to_binlog(pge.get());
 
     binlog->close();
 }
@@ -160,12 +134,14 @@ TEST(STATEMENT_EVENT_FORMAT_TEST, QUERY_EVENT) {
     catalog_arg = db_arg;
     uint64_t ddl_xid_arg = 31;
     size_t query_length = strlen(query_arg);
-    unsigned long thread_id_arg = 10000;
+    unsigned long thread_id_arg = 10000;             // 随意
+    /// 这三个参数，暂时没用到
     unsigned long long sql_mode_arg = 0;             // 随意
     unsigned long auto_increment_increment_arg = 0;  // 随意
     unsigned long auto_increment_offset_arg = 0;     // 随意
-    unsigned int number = 0;                         // 一定要
-    unsigned long long table_map_for_update_arg = 0; // 随意
+    ///
+    unsigned int number = 0;                         // 时区，0 表示 en-US
+    unsigned long long table_map_for_update_arg = 0; // 只涉及单表 update，所以填 0
     int errcode = 0; // 默认不出错
     uint64 immediate_commit_timestamp_arg = 1722493961117679;
 
@@ -195,7 +171,7 @@ TEST(ROWS_EVENT_FORMAT_TEST, TABLE_MAP_EVENT) {
     // 1. 查询 table_name 是否访问过， 如果没有， 就创建一个 Table_id 对象
     Table_id tid(13);
     // 2. 读 field's size()
-    uint64 colCnt = 27;
+    uint64 colCnt = 1;
     const char *dbName = "t1";
     const char *tblName = "t1";
 
@@ -229,10 +205,25 @@ TEST(ROWS_EVENT_FORMAT_TEST, WRITE_EVENT) {
   LOFT_VERIFY(ret != RC::SUCCESS, "Failed to open binlog file");
 
   // TODO
+  // 1. 查询 table_name 是否访问过， 如果没有， 就创建一个 Table_id 对象
   Table_id tid(13);
-  uint64 colcnt = 1;
+  // 2. 读 field's size()
+  uint64 colCnt = 1;
+  const char *dbName = "t1";
+  const char *tblName = "t1";
+
+  std::vector<mysql::FieldRef>         field_vec;
+  auto field_obj = mysql::make_field(
+      "a1", 0, false, false, 0, MYSQL_TYPE_LONG, 0, 0);
+  field_vec.emplace_back(field_obj);
+
   uint64 immediate_commit_timestamp_arg = 1722493961117679;
-  auto insertRow = std::make_unique<Rows_event>(tid, colcnt, 1, WRITE_ROWS_EVENT, immediate_commit_timestamp_arg);  // 初始化 一个 rows_event 对象
+
+  auto table_map_event =
+      std::make_unique<Table_map_event>(tid, colCnt, dbName, strlen(dbName), tblName, strlen(tblName), field_vec, immediate_commit_timestamp_arg);
+  binlog->write_event_to_binlog(table_map_event.get());
+
+  auto insertRow = std::make_unique<Rows_event>(tid, colCnt, 1, WRITE_ROWS_EVENT, immediate_commit_timestamp_arg);  // 初始化 一个 rows_event 对象
 
   int data1 = 1;
   std::vector<int> rows{1};
@@ -264,9 +255,23 @@ TEST(ROWS_EVENT_FORMAT_TEST, UPDATE_EVENT) {
 
   // TODO
   Table_id tid(13);
-  uint64 colcnt = 1;
+  // 2. 读 field's size()
+  uint64 colCnt = 1;
+  const char *dbName = "t1";
+  const char *tblName = "t1";
+
+  std::vector<mysql::FieldRef>         field_vec;
+  auto field_obj = mysql::make_field(
+      "a1", 0, false, false, 0, MYSQL_TYPE_LONG, 0, 0);
+  field_vec.emplace_back(field_obj);
+
   uint64 immediate_commit_timestamp_arg = 1722493961117679;
-  auto updateRow = std::make_unique<Rows_event>(tid, colcnt, 1, WRITE_ROWS_EVENT, immediate_commit_timestamp_arg);  // 初始化 一个 rows_event 对象
+
+  auto table_map_event =
+      std::make_unique<Table_map_event>(tid, colCnt, dbName, strlen(dbName), tblName, strlen(tblName), field_vec, immediate_commit_timestamp_arg);
+  binlog->write_event_to_binlog(table_map_event.get());
+
+  auto updateRow = std::make_unique<Rows_event>(tid, colCnt, 1, UPDATE_ROWS_EVENT, immediate_commit_timestamp_arg);  // 初始化 一个 rows_event 对象
 
   int newData1 = 10;
   std::vector<int> rows_after{1};
@@ -280,7 +285,7 @@ TEST(ROWS_EVENT_FORMAT_TEST, UPDATE_EVENT) {
   std::vector<uint8> rows_null_before{0};
   updateRow->set_rows_before(std::move(rows_before));
   updateRow->set_null_before(std::move(rows_null_before));
-  updateRow->write_data_after(&conditionData, MYSQL_TYPE_LONG, 4, 0, 0, 0);
+  updateRow->write_data_before(&conditionData, MYSQL_TYPE_LONG, 4, 0, 0, 0);
 
 
   binlog->write_event_to_binlog(updateRow.get());
@@ -305,16 +310,30 @@ TEST(ROWS_EVENT_FORMAT_TEST, DELETE_EVENT) {
 
   // TODO
   Table_id tid(13);
-  uint64 colcnt = 1;
-  uint64 immediate_commit_timestamp_arg = 1722493961117679;
-  auto deleteRow = std::make_unique<Rows_event>(tid, colcnt, 1, WRITE_ROWS_EVENT, immediate_commit_timestamp_arg);  // 初始化 一个 rows_event 对象
+  // 2. 读 field's size()
+  uint64 colCnt = 1;
+  const char *dbName = "t1";
+  const char *tblName = "t1";
 
-  int data = 10;
+  std::vector<mysql::FieldRef>         field_vec;
+  auto field_obj = mysql::make_field(
+      "a1", 0, false, false, 0, MYSQL_TYPE_LONG, 0, 0);
+  field_vec.emplace_back(field_obj);
+
+  uint64 immediate_commit_timestamp_arg = 1722493961117679;
+
+  auto table_map_event =
+      std::make_unique<Table_map_event>(tid, colCnt, dbName, strlen(dbName), tblName, strlen(tblName), field_vec, immediate_commit_timestamp_arg);
+  binlog->write_event_to_binlog(table_map_event.get());
+
+  auto deleteRow = std::make_unique<Rows_event>(tid, colCnt, 1, DELETE_ROWS_EVENT, immediate_commit_timestamp_arg);  // 初始化 一个 rows_event 对象
+
+  int conditionData = 10;
   std::vector<int> rows_before{1};
   std::vector<uint8> rows_null_before{0};
   deleteRow->set_rows_before(std::move(rows_before));
   deleteRow->set_null_before(std::move(rows_null_before));
-  deleteRow->write_data_after(&data, MYSQL_TYPE_LONG, 4, 0, 0, 0);
+  deleteRow->write_data_before(&conditionData, MYSQL_TYPE_LONG, 4, 0, 0, 0);
 
   binlog->close();
 }

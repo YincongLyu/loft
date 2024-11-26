@@ -1,6 +1,3 @@
-#将 data 文件复制到构建目录
-configure_file(${CMAKE_SOURCE_DIR}/data ${CMAKE_BINARY_DIR}/test/data COPYONLY)
-
 include(GoogleTest)
 
 file(GLOB_RECURSE SRC_TEST ./*.cpp)

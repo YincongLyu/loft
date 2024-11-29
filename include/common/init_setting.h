@@ -15,13 +15,13 @@
 // *** binlog file write configuration ***
 #define DEFAULT_BINLOG_FILE_DIR "/home/yincong/collectBin/"
 #define DEFAULT_BINLOG_FILE_NAME_PREFIX "ON"
-#define DEFAULT_BINLOG_FILE_SIZE (1024 * 1024 * 50)  // 每个 binlog 文件 20 M
-// 200 byte 是一个安全数
+#define DEFAULT_BINLOG_FILE_SIZE (1024 * 1024 * 20)  // 每个 binlog 文件 20 M
+// 200 byte 预留给 rotate event
 #define WRITE_THRESHOLD 200
 #define BINLOG_FILE_WRITE_SAFE_SIZE (BINLOG_FILE_SIZE - WRITE_THRESHOLD)
 #define BINLOG_FILE_TTL 30s
 
-#define THREAD_NUM 1
+#define CORE_THREAD_NUM 1
 
 // arbitrary
 #define DML_TABLE_ID 13

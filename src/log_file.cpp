@@ -236,60 +236,8 @@ RC LogFileManager::init(const char *directory, const char *file_name_prefix, uin
     return RC::SUCCESS;
 }
 
-RC LogFileManager::transform(const char *filename, bool is_ddl) {
-    // reader 的成员变量等到 open 之后再初始化
-    file_reader_->open(filename);
-
-    auto [data, fileSize ] = file_reader_->readFromFile(filename);
-    auto bufferReader = std::make_unique<BufferReader>(data.get(), fileSize);
-
-    // 每次调用 transform 都默认从目录下最后一个文件继续写
-    this->last_file(*file_writer_.get());
-    LOG_DEBUG("last file write pos=%lu", file_writer_->get_binlog()->get_bytes_written());
-
-    // 但这个其实很难控制，我们应该控制每个 文件可以处理 xxx 条 sql，保证总体在 限定bytes就可以，不然每次都要用 if 判断 是否需要切换文件
-    if (is_ddl) {
-        while (bufferReader->valid()) {
-            auto sql_len = bufferReader->read<uint32_t>();
-
-            // 2.2. 进入转换流程，先初始化一片 内存空间， copy 出来
-            std::vector<unsigned char> buf(sql_len);
-            bufferReader->memcpy<unsigned char *>(buf.data(), sql_len);
-            // FIXME
-            // 在这里每次转换一条 sql， 找时机切换到 next_file! 如果在这里每次判断，非常耗时
-            if (!file_writer_->get_binlog()->remain_bytes_safe()) {
-                this->next_file(*file_writer_.get());
-            }
-            const DDL *ddl = GetDDL(buf.data());
-            transform_manager_->transformDDL(ddl, file_writer_->get_binlog());
-        }
-    } else {
-        int dml_count = 0;
-        while (bufferReader->valid()) {
-            auto sql_len = bufferReader->read<uint32_t>();
-
-            std::vector<unsigned char> buf(sql_len);
-            bufferReader->memcpy<unsigned char *>(buf.data(), sql_len);
-            // 在 1048 427 切换了，1024 * 1024 = 1048 576，写完之后 1048 488 差一点就超出了
-            if (!file_writer_->get_binlog()->remain_bytes_safe()) {
-                this->next_file(*file_writer_.get());
-                LOG_DEBUG("write dml cnt=%d: revoke rotate", dml_count);
-            }
-
-            const DML *dml = GetDML(buf.data());
-            transform_manager_->transformDML(dml, file_writer_->get_binlog());
-            dml_count++;
-//            if (dml_count % 500 == 0)
-//                LOG_DEBUG("%lu", file_writer_->get_binlog()->get_bytes_written());
-        }
-//        LOG_DEBUG("done, dml count=%d", dml_count);
-    }
-
-    return RC::SUCCESS;
-}
-
 /**
- * @brief 同步 调用 transform()
+ * @brief [only] 内部测试 同步调用 transform()
  */
 RC LogFileManager::transform(std::vector<unsigned char> &&buf, bool is_ddl) {
   if (is_ddl) {
@@ -372,8 +320,6 @@ RC LogFileManager::next_file(BinLogFileWriter &file_writer) {
     // 最小从 1 开始
     uint32_t fileno = log_files_.empty() ? 1 : log_files_.rbegin()->first + 1;
 
-    last_file_no_ = fileno;
-
     std::ostringstream oss;
     oss << std::setw(6) << std::setfill('0') << fileno;
     file_suffix_ = oss.str();
@@ -391,12 +337,14 @@ RC LogFileManager::next_file(BinLogFileWriter &file_writer) {
         file_writer.close();
     }
 
+
     log_files_.emplace(fileno, next_file_path);
     // 写入索引文件
     write_filename2index(nextFilename);
 
     LOG_DEBUG("[==rotate file==]next file name = %s", next_file_path.c_str());
 
+    last_file_no_.store(fileno, std::memory_order_release);  // 更新当前文件号
     return file_writer.open(next_file_path.c_str(), max_file_size_per_file_);
 }
 
@@ -427,7 +375,7 @@ RC LogFileManager::get_last_status_from_filename(
   if (iter == file_ckp_.end()) {
     return RC::FILE_NOT_EXIST;  // 文件不存在
   }
-  ckp = iter->second.checkpoint;
+  ckp = iter->second;
 
   // 解析 ckp，格式应为 "trxSeq-seq-scn"
   std::string delimiter = "-";

@@ -66,25 +66,8 @@ int main()
     }
   }
 
-  auto startTime = std::chrono::high_resolution_clock::now();  // 记录开始时间
-
   // 中途查询进度
   LOG_DEBUG("test show process......");
   logFileManager->log_progress();
-
-  // main 函数最后部分，添加显式等待，如果等待 转换的任务执行完，就不用显示调用
-//  logFileManager->wait_for_completion(); // 确保所有任务完成
-//  logFileManager->shutdown();            // 显式关闭资源
-
-  // 测试 API 3, 查询 ON.000001 文件的 scn，seq，ckp
-  uint64 scn = 0;
-  uint32 seq = 0;
-  std::string ckp;
-  logFileManager->get_last_status_from_filename("ON.000001", scn, seq, ckp);
-  LOG_DEBUG("scn: %lu, seq: %u, ckp: %s", scn, seq, ckp.c_str());
-
-  auto dmlEndTime = std::chrono::high_resolution_clock::now();  // 记录结束时间
-  duration        = std::chrono::duration_cast<std::chrono::milliseconds>(dmlEndTime - readFileEndTime).count();
-  LOG_DEBUG("DML transform execution time: %ld ms", duration);
 
 }

@@ -62,9 +62,8 @@ public:
   }
   bool write_event_to_binlog(AbstractEvent *ev);
 
-  //    void add_bytes_written(loft::my_off_t inc) { bytes_written_ += inc; }
-  bool     remain_bytes_safe() { return m_binlog_file_->get_position() < max_size_ - WRITE_THRESHOLD; }
-  uint64_t get_bytes_written() { return m_binlog_file_->get_position(); }
+  bool     remain_bytes_safe(uint32 event_len) { return m_binlog_file_->get_position() + event_len + WRITE_THRESHOLD < max_size_; }
+  uint64 get_bytes_written() { return m_binlog_file_->get_position(); }
 
   void reset_bytes_written() { bytes_written_ = 0; }
 
@@ -75,7 +74,6 @@ private:
   {
     LOG_OPENED,
     LOG_CLOSED,
-    LOG_TO_BE_OPENED
   };
 
   std::atomic<enum_log_state_> atomic_log_state_;  // 描述文件打开状态

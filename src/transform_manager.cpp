@@ -74,7 +74,6 @@ inline uint64_t LogFormatTransformManager::stringToTimestamp(const std::string& 
 
 void LogFormatTransformManager::transformDDL(const DDL *ddl, MYSQL_BIN_LOG *binLog)
 {
-
   auto ddlType = ddl->ddl_type();
 
   auto dbName = ddl->db_name();
@@ -356,7 +355,6 @@ void LogFormatTransformManager::transformDML(const DML *dml, MYSQL_BIN_LOG *binL
 
 std::vector<std::unique_ptr<AbstractEvent>> LogFormatTransformManager::transformDDL(const DDL *ddl)
 {
-
   auto ddlType = ddl->ddl_type();
 
   auto dbName = ddl->db_name();

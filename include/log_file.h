@@ -81,7 +81,6 @@ public:
 private:
   std::string filename_;  /// 日志文件名
                           //    int fd_ = -1;      /// 日志文件描述符
-  int last_ckp_ = 0;      /// 写入的最后一条SQL的scn, seq, ckp
 
   std::unique_ptr<MYSQL_BIN_LOG> bin_log_;  /// 封装的 MYSQL_BIN_LOG 类
 };
@@ -170,6 +169,7 @@ public:
   auto get_file_reader() -> RedoLogFileReader * { return file_reader_.get(); }
   auto get_file_writer() -> BinLogFileWriter * { return file_writer_.get(); }
   auto get_transform_manager() -> LogFormatTransformManager * { return transform_manager_.get(); }
+  auto get_last_file_no() -> uint32 { return last_file_no_.load(); }
 
   class BatchProcessor : public Runnable {
   public:
@@ -190,6 +190,9 @@ public:
           for (auto &event : events) {
             result->transformed_data.push_back(transform_to_buffer(event.get()));
           }
+          for (int i = 0; i < 3; i++) {
+            result->ckps.push_back(checkpoint);
+          }
 
         } else {
           const DML* dml = GetDML(task.data_.data());
@@ -200,11 +203,12 @@ public:
           for (auto &event : events) {
             result->transformed_data.push_back(transform_to_buffer(event.get()));
           }
+          for (int i = 0; i < 5; i++) {
+            result->ckps.push_back(checkpoint);
+          }
         }
       }
-
-      // FIXME 和调用 next_file 做一个同步：  seq: 228523,
-      manager_->update_checkpoint(manager_->last_file_no_, checkpoint, batch_sequence_);  // 更新 file_ckp_
+      // ckp 先保存到 result 里，直到 切换文件时，才知道写到哪条 event，再写入对应的 ckp
 
       // 将结果加入写入队列
       manager_->result_queue_.add_result(std::move(result));
@@ -231,6 +235,8 @@ public:
   struct BatchResult {
     size_t sequence;
     std::vector<std::vector<uchar>> transformed_data;  // 每个event转换后的数据
+    std::vector<std::string> ckps;  // 每个event对应的ckp;
+    size_t event_write_count_{0};
 
     BatchResult(size_t seq) : sequence(seq) {}
   };
@@ -239,7 +245,7 @@ public:
   struct ResultQueue {
     std::mutex mutex_;
     std::condition_variable cv_;
-    std::unordered_map<size_t, std::unique_ptr<BatchResult>> pending_results_;
+        std::unordered_map<size_t, std::unique_ptr<BatchResult>> pending_results_;
     size_t next_write_sequence_{0};
     std::atomic<bool>* stop_flag_;
 
@@ -283,39 +289,27 @@ public:
           std::lock_guard<std::mutex> write_lock(manager->writer_mutex_);
           for (auto& data : result->transformed_data) {
             // 切换文件
-            if (!writer->get_binlog()->remain_bytes_safe()) {
+            const uint32* event_len_ptr = reinterpret_cast<const uint32_t*>(data.data() + EVENT_LEN_OFFSET);
+            if (!writer->get_binlog()->remain_bytes_safe(*event_len_ptr)) {
+              manager->update_checkpoint(manager->get_last_file_no(), result->ckps[result->event_write_count_]);
               manager->next_file(*writer);
             }
 
             // 写入实际数据, 填充 common_header 中的 log_pos 字段
-            if (writer->get_binlog() == nullptr) {
-              LOG_ERROR("bin_log_ is not initialized.");
-              return;
-            }
-
-            uint64_t current_pos = writer->get_binlog()->get_bytes_written();
-            uint64_t next_pos = current_pos + data.size();
+            uint64 current_pos = writer->get_binlog()->get_bytes_written();
+            uint64 next_pos = current_pos + data.size();
             int4store(data.data() + LOG_POS_OFFSET, next_pos);
 
             writer->get_binlog()->write(data.data(), data.size());
+            result->event_write_count_++;
           }
         }
       }
     }
-
   };
 
-  struct CheckpointInfo {
-    std::string checkpoint;
-    size_t sequence;
-  };
-
-  void update_checkpoint(uint32 file_no, const std::string& checkpoint, size_t sequence) {
-
-    // 只有当新的 sequence 更大时才更新 checkpoint
-    if (file_ckp_.find(file_no) == file_ckp_.end() || sequence > file_ckp_[file_no].sequence) {
-      file_ckp_[file_no] = {checkpoint, sequence};  // 更新 file_ckp_，存储 checkpoint 和 sequence
-    }
+  void update_checkpoint(uint32 file_no, const std::string& checkpoint) {
+    file_ckp_[file_no] = checkpoint;
   }
 
   /**
@@ -363,9 +357,10 @@ private:
   size_t                max_file_size_per_file_ = DEFAULT_BINLOG_FILE_SIZE;  /// 一个文件的最大字节数
 
   std::map<uint32, std::filesystem::path> log_files_;  /// file_no 和 日志文件名 的映射
-  std::map<uint32, CheckpointInfo> file_ckp_; /// file_no 和 ckp 的映射
+  std::map<uint32, std::string> file_ckp_; /// file_no 和 ckp 的映射
 
-  uint32 last_file_no_ = 0;
+  std::atomic<size_t> last_file_no_{0}; // 当前目录下最后一个文件号
+
 
   std::unique_ptr<RedoLogFileReader>         file_reader_;
 
@@ -374,7 +369,7 @@ private:
   std::condition_variable task_cond_; // event_trigger 通知
   std::mutex task_mutex_;
   std::thread task_collector_thread_;  // 用于运行process_tasks的线程
-  static constexpr size_t BATCH_SIZE = 2000; // 批量处理的大小
+  static constexpr size_t BATCH_SIZE = 4096; // 批量处理的大小
   std::atomic<size_t> pending_tasks_{0}; // 跟踪待处理任务数量
 
   std::atomic<bool> stop_flag_{false};  // 用于控制线程停止

@@ -1,7 +1,5 @@
 #include "events/control_events.h"
 #include "utils/little_endian.h"
-// #include "logging.h"
-// #include "macros.h"
 #include <iostream>
 
 /**************************************************************************
@@ -16,7 +14,7 @@ Format_description_event::Format_description_event(uint8_t binlog_ver, const cha
   if (binlog_ver == 4) { /* MySQL 5.0 and above*/
     memset(server_version_, 0, ST_SERVER_VER_LEN);
     // 直接写入
-    strcpy(server_version_, server_ver);
+    strlcpy(server_version_, server_ver, ST_SERVER_VER_LEN);
     //    create_timestamp_ = 1681837923;
 
     common_header_len_    = LOG_EVENT_HEADER_LEN;
@@ -325,10 +323,8 @@ Gtid_event::~Gtid_event() = default;
 **************************************************************************/
 Xid_event::Xid_event(uint64_t xid_arg, uint64 immediate_commit_timestamp_arg) : AbstractEvent(XID_EVENT), xid_(xid_arg)
 {
-  //    this->common_header_ = new EventCommonHeader();
   time_t i_ts          = static_cast<time_t>(immediate_commit_timestamp_arg / 1000000);
   this->common_header_ = std::make_unique<EventCommonHeader>(i_ts);
-  //  this->common_header_ = std::make_unique<EventCommonHeader>(immediate_commit_timestamp_arg);
   //    this->common_footer_ = new EventCommonFooter(BINLOG_CHECKSUM_ALG_OFF);
 }
 
@@ -382,9 +378,7 @@ size_t Rotate_event::write_data_header_to_buffer(uchar *buf)
 
 size_t Rotate_event::write_data_body_to_buffer(uchar *buffer)
 {
-
   // 写入新日志标识
   memcpy(buffer, pointer_cast<const uchar *>(new_log_ident_.c_str()), ident_len_);
-
   return ident_len_;
 }

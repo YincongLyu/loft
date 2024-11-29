@@ -25,14 +25,12 @@ public:
 class LongValueHandler : public FieldDataHandler {
 public:
   void processData(const kvPair* data, mysql::Field* field, Rows_event* row) override {
-    long value = data->value_as_LongVal()->value();
+    int64 value = data->value_as_LongVal()->value();
 
     if (field->type() == MYSQL_TYPE_YEAR) {
       value -= (value >= 2000 ? 2000 : 1900);
-      row->writeData(&value, field->type());
-    } else {
-      row->writeData(&value, field->type(), field->pack_length());
     }
+    row->writeData(reinterpret_cast<uchar*>(&value), field->type(), field->pack_length());
   }
 };
 
@@ -44,12 +42,13 @@ public:
     std::string num = formatDoubleToFixedWidth(value, field->get_width(), field->decimals());
     LOFT_ASSERT(num != "", "double number format must be valid");
 
+    // 模板函数会发生静态 分支检查
     if (field->type() == MYSQL_TYPE_FLOAT) {
       float float_value = std::stof(num);
-      row->writeData(&float_value, field->type(), field->pack_length());
+      row->writeData(reinterpret_cast<uchar*>(&float_value), field->type(), field->pack_length());
     } else {
       double double_value = std::stod(num);
-      row->writeData(&double_value, field->type(), field->pack_length());
+      row->writeData(reinterpret_cast<uchar*>(&double_value), field->type(), field->pack_length());
     }
   }
 private:
@@ -87,14 +86,20 @@ public:
 
     if (field->type() == MYSQL_TYPE_NEWDECIMAL) {
       double double_value = std::stod(str);
-      row->writeData(&double_value, field->type(), 0, 0, field->pack_length(), field->decimals());
+      row->writeData(reinterpret_cast<uchar*>(&double_value), field->type(), 0, 0, field->pack_length(), field->decimals());
+    } else if (field->type() == MYSQL_TYPE_JSON) {
+      // base64 解码，后不用按照 3 组再合并解释出来，直接写入
+      auto dst = base64_decode(str);
+      row->writeData(dst.data(), field->type(), field->pack_length(), dst.size());
+
     } else {
       char *dst = (char *)malloc(base64_needed_decoded_length(strlen(str)));
       int64_t dst_len = base64_decode(str, strlen(str), (void *)dst, nullptr, 0);
-      row->writeData(dst, field->type(), field->pack_length(), dst_len);
+      row->writeData(reinterpret_cast<uchar *>(dst), field->type(), field->pack_length(), dst_len);
       // 释放内存
       free(dst);
     }
+    // TODO 时间类型 datatime timestamp
 
   }
 };

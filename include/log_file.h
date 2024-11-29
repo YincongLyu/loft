@@ -119,7 +119,6 @@ public:
    */
   RC transform(std::vector<unsigned char> &&buf, bool is_ddl);
   std::future<RC> transformAsync(std::vector<unsigned char> &&buf, bool is_ddl);
-  std::future<RC> transformAsync2(std::vector<unsigned char> &&buf, bool is_ddl);
 
       /// 接口三：
   /**
@@ -172,11 +171,6 @@ public:
   auto get_file_writer() -> BinLogFileWriter * { return file_writer_.get(); }
   auto get_transform_manager() -> LogFormatTransformManager * { return transform_manager_.get(); }
 
-  /**
-   * @brief 等待 BatchQueue 和 ResultQueue 的任务都完成
-   */
-  void wait_for_completion();
-
   class BatchProcessor : public Runnable {
   public:
     BatchProcessor(LogFileManager* manager, std::vector<Task>&& tasks, size_t sequence)
@@ -185,11 +179,11 @@ public:
     void run() override {
       auto result = std::make_unique<BatchResult>(batch_sequence_);
 
+      std::string checkpoint;
       for (const auto& task : tasks_) {
         if (task.is_ddl_) {
           const DDL* ddl = GetDDL(task.data_.data());
-          manager_->file_ckp_[manager_->last_file_no_] =
-              ddl->check_point()->c_str();
+          checkpoint = ddl->check_point()->c_str();
 
           // 转换但不直接写入文件
           auto events = manager_->get_transform_manager()->transformDDL(ddl);
@@ -199,8 +193,7 @@ public:
 
         } else {
           const DML* dml = GetDML(task.data_.data());
-          manager_->file_ckp_[manager_->last_file_no_] =
-              dml->check_point()->c_str();
+          checkpoint = dml->check_point()->c_str();
 
           // 转换但不直接写入文件
           auto events = manager_->get_transform_manager()->transformDML(dml);
@@ -209,6 +202,9 @@ public:
           }
         }
       }
+
+      // FIXME 和调用 next_file 做一个同步：  seq: 228523,
+      manager_->update_checkpoint(manager_->last_file_no_, checkpoint, batch_sequence_);  // 更新 file_ckp_
 
       // 将结果加入写入队列
       manager_->result_queue_.add_result(std::move(result));
@@ -229,51 +225,6 @@ public:
     LogFileManager* manager_;
     std::vector<Task> tasks_;
     size_t batch_sequence_;  // 批次序号，用于确保顺序执行
-  };
-
-  // BatchQueue修改为允许并发处理
-  struct BatchQueue {
-    std::mutex mutex_;
-    std::condition_variable cv_;
-    std::queue<std::unique_ptr<BatchProcessor>> queue_;
-    std::atomic<bool>* stop_flag_;
-
-    void add_batch(std::unique_ptr<BatchProcessor> batch) {
-      std::lock_guard<std::mutex> lock(mutex_);
-      queue_.push(std::move(batch));
-      cv_.notify_all();  // 通知所有等待的线程
-    }
-
-    void process_batches() {
-      while (!(*stop_flag_)) {
-        std::unique_ptr<BatchProcessor> batch;
-        {
-          std::unique_lock<std::mutex> lock(mutex_);
-          if (cv_.wait_for(lock,
-                  std::chrono::milliseconds(100),
-                  [this] { return *stop_flag_ || !queue_.empty(); })) {
-            if (*stop_flag_ && queue_.empty()) {
-              break;
-            }
-            if (!queue_.empty()) {
-              batch = std::move(queue_.front());
-              queue_.pop();
-            }
-          }
-        }
-        if (batch) {
-          batch->run();
-        }
-      }
-
-      // 主动清空剩余的任务
-      while (!queue_.empty()) {
-        auto batch = std::move(queue_.front());
-        queue_.pop();
-        batch->run();
-      }
-
-    }
   };
 
   // 用于存储转换后的数据
@@ -353,6 +304,31 @@ public:
     }
 
   };
+
+  struct CheckpointInfo {
+    std::string checkpoint;
+    size_t sequence;
+  };
+
+  void update_checkpoint(uint32 file_no, const std::string& checkpoint, size_t sequence) {
+
+    // 只有当新的 sequence 更大时才更新 checkpoint
+    if (file_ckp_.find(file_no) == file_ckp_.end() || sequence > file_ckp_[file_no].sequence) {
+      file_ckp_[file_no] = {checkpoint, sequence};  // 更新 file_ckp_，存储 checkpoint 和 sequence
+    }
+  }
+
+  /**
+   * @brief 等待 BatchQueue 和 ResultQueue 的任务都完成
+   */
+  void wait_for_completion();
+
+  /**
+   * @brief 保证所有任务执行完后安全释放资源
+   */
+  void shutdown();
+
+
   /**
    * @brief 追踪处理进度
    */
@@ -363,19 +339,17 @@ public:
                  written_tasks_.load());
   }
 
-  void shutdown();
-
-  void preload_tasks(const std::vector<Task>& tasks); // 预加载任务
   size_t get_processed_sql_num() const {
     return processed_tasks_.load(std::memory_order_relaxed);
   }
 
+  void preload_tasks(const std::vector<Task>& tasks); // 预加载任务
 
 private:
+  /**
+ * @brief 任务收集 线程
+   */
   void process_tasks();
-  void process_tasks2();
-  void init_thread_pool(int core_size, int max_size);
-
 
 private:
   const char *file_prefix_ = DEFAULT_BINLOG_FILE_NAME_PREFIX;
@@ -389,25 +363,27 @@ private:
   size_t                max_file_size_per_file_ = DEFAULT_BINLOG_FILE_SIZE;  /// 一个文件的最大字节数
 
   std::map<uint32, std::filesystem::path> log_files_;  /// file_no 和 日志文件名 的映射
-  std::map<uint32, std::string> file_ckp_; /// file_no 和 ckp 的映射
+  std::map<uint32, CheckpointInfo> file_ckp_; /// file_no 和 ckp 的映射
+
   uint32 last_file_no_ = 0;
 
   std::unique_ptr<RedoLogFileReader>         file_reader_;
 
-  // 1. 生产者
+  // 1. 生产者——投放任务
   std::shared_ptr<TaskQueue<Task>>   ring_buffer_;
   std::condition_variable task_cond_; // event_trigger 通知
   std::mutex task_mutex_;
-  std::vector<std::thread> task_collector_threads_;  // 用于运行process_tasks的线程
+  std::thread task_collector_thread_;  // 用于运行process_tasks的线程
   static constexpr size_t BATCH_SIZE = 2000; // 批量处理的大小
   std::atomic<size_t> pending_tasks_{0}; // 跟踪待处理任务数量
 
   std::atomic<bool> stop_flag_{false};  // 用于控制线程停止
-  // 2. 转换计算
+
+  // 2. 消费者——转换计算
   std::unique_ptr<LogFormatTransformManager> transform_manager_;
   std::unique_ptr<ThreadPoolExecutor> thread_pool_;
-  BatchQueue batch_queue_;
-  std::atomic<size_t> batch_sequence_{0};
+
+  std::atomic<size_t> batch_sequence_{0}; // 顺序收集 tasks 的批次序号
 
   // 3. 共享的文件写入器
   std::unique_ptr<BinLogFileWriter> file_writer_;

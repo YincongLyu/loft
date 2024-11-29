@@ -8,7 +8,6 @@
 #include "common/simple_queue.h"
 #include "common/thread_util.h"
 
-
 using namespace std;
 
 namespace common {

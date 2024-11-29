@@ -128,3 +128,5 @@ static void clear_N_bit(uchar &f, int N) { f &= ~(1 << (N - 1)); }
     mi_int4store((uchar *)(T) + 0, def_temp4);                    \
     mi_int4store((uchar *)(T) + 4, def_temp3);                    \
   }
+
+static inline void float8store(uchar *V, double M) { memcpy(V, &M, sizeof(double)); }

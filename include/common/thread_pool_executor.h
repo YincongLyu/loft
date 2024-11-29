@@ -150,28 +150,28 @@ private:
 
   struct ThreadData
   {
-    bool    core_thread = false;    /// 是否是核心线程
-    bool    idle        = false;    /// 是否空闲
-    bool    terminated  = false;    /// 是否已经退出
+    bool         core_thread = false;    /// 是否是核心线程
+    bool         idle        = false;    /// 是否空闲
+    bool         terminated  = false;    /// 是否已经退出
     std::thread *thread_ptr  = nullptr;  /// 线程指针
   };
 
 private:
   State state_ = State::NEW;  /// 线程池状态
 
-  int                  core_pool_size_ = 0;  /// 核心线程个数
-  int                  max_pool_size_  = 0;  /// 最大线程个数
+  int                       core_pool_size_ = 0;  /// 核心线程个数
+  int                       max_pool_size_  = 0;  /// 最大线程个数
   std::chrono::milliseconds keep_alive_time_ms_;  /// 非核心线程空闲多久后退出
 
   std::unique_ptr<Queue<std::unique_ptr<Runnable>>> work_queue_;  /// 任务队列
 
-  mutable std::mutex               lock_;     /// 保护线程池内部数据的锁
+  mutable std::mutex                    lock_;     /// 保护线程池内部数据的锁
   std::map<std::thread::id, ThreadData> threads_;  /// 线程列表
 
-  int             largest_pool_size_ = 0;  /// 历史上达到的最大的线程个数
+  int                largest_pool_size_ = 0;  /// 历史上达到的最大的线程个数
   std::atomic<int64> task_count_        = 0;  /// 处理过的任务个数
-  std::atomic<int>     active_count_      = 0;  /// 活跃线程个数
-  std::string          pool_name_;              /// 线程池名称
+  std::atomic<int>   active_count_      = 0;  /// 活跃线程个数
+  std::string        pool_name_;              /// 线程池名称
 };
 
 }  // namespace common

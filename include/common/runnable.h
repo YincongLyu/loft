@@ -35,5 +35,4 @@ private:
   std::function<void()> callable_;
 };
 
-
 }  // namespace common

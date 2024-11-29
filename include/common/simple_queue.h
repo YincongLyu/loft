@@ -64,4 +64,3 @@ int SimpleQueue<T>::size() const
 }
 
 }  // namespace common
-

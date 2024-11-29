@@ -26,8 +26,8 @@ public:
   bool write_data_header(Basic_ostream *ostream) override;
   bool write_data_body(Basic_ostream *ostream) override;
 
-  size_t write_data_header_to_buffer(uchar* buffer) override;
-  size_t write_data_body_to_buffer(uchar* buffer) override;
+  size_t write_data_header_to_buffer(uchar *buffer) override;
+  size_t write_data_body_to_buffer(uchar *buffer) override;
 
   int save_field_metadata();
 

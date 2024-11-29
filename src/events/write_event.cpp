@@ -1,3 +1,7 @@
+//
+// Created by Takenzz on 2024/10/20.
+//
+
 #include "events/write_event.h"
 
 Rows_event::Rows_event(
@@ -6,17 +10,16 @@ Rows_event::Rows_event(
 {
   // 构造函数中预分配内存，按照 30 columns 来算 * 8 byte， string类型会经常扩容
   const size_t INITIAL_SIZE = 64;
-  m_rows_before_buf = std::make_unique<uchar[]>(INITIAL_SIZE);
-  m_rows_after_buf = std::make_unique<uchar[]>(INITIAL_SIZE);
-  m_before_capacity = INITIAL_SIZE;
-  m_after_capacity = INITIAL_SIZE;
-  before_data_size_used = 0;
-  after_data_size_used = 0;
+  m_rows_before_buf         = std::make_unique<uchar[]>(INITIAL_SIZE);
+  m_rows_after_buf          = std::make_unique<uchar[]>(INITIAL_SIZE);
+  m_before_capacity         = INITIAL_SIZE;
+  m_after_capacity          = INITIAL_SIZE;
+  before_data_size_used     = 0;
+  after_data_size_used      = 0;
 
   this->Set_width(wid);
   this->Set_flags(flag);
   cols_init();
-  // bits_init();
 
   time_t i_ts          = static_cast<time_t>(immediate_commit_timestamp_arg / 1000000);
   this->common_header_ = std::make_unique<EventCommonHeader>(i_ts);
@@ -129,21 +132,22 @@ bool Rows_event::write(Basic_ostream *ostream)
   return write_common_header(ostream, get_data_size()) && write_data_header(ostream) && write_data_body(ostream);
 }
 
-void Rows_event::buf_resize(std::unique_ptr<uchar[]>& buf, size_t& capacity, size_t current_size, size_t needed_size) {
+void Rows_event::buf_resize(std::unique_ptr<uchar[]> &buf, size_t &capacity, size_t current_size, size_t needed_size)
+{
   if (needed_size <= capacity) {
     return;  // 如果现有容量足够，直接返回
   }
 
   // 计算新容量：至少是needed_size，并且是当前容量的2倍
   size_t new_capacity = std::max(needed_size, capacity * 2);
-  auto new_buf = std::make_unique<uchar[]>(new_capacity);
+  auto   new_buf      = std::make_unique<uchar[]>(new_capacity);
 
   // 拷贝现有数据
   if (current_size > 0 && buf) {
     memcpy(new_buf.get(), buf.get(), current_size);
   }
 
-  buf = std::move(new_buf);
+  buf      = std::move(new_buf);
   capacity = new_capacity;
 }
 
@@ -206,7 +210,8 @@ size_t Rows_event::calculate_event_size()
   return event_size;
 }
 
-size_t Rows_event::write_data_header_to_buffer(uchar *buffer) {
+size_t Rows_event::write_data_header_to_buffer(uchar *buffer)
+{
   int6store(buffer + ROWS_MAPID_OFFSET, m_table_id.get_id());
   int2store(buffer + ROWS_FLAGS_OFFSET, m_flags);
   uint extra_row_info_payloadlen = EXTRA_ROW_INFO_HEADER_LENGTH;
@@ -215,11 +220,12 @@ size_t Rows_event::write_data_header_to_buffer(uchar *buffer) {
   return ROWS_HEADER_LEN_V2;
 }
 
-size_t Rows_event::write_data_body_to_buffer(uchar *buffer) {
-  uchar* current_pos = buffer;
+size_t Rows_event::write_data_body_to_buffer(uchar *buffer)
+{
+  uchar *current_pos = buffer;
 
   // 写入width
-  uchar sbuf[sizeof(m_width) + 1];
+  uchar        sbuf[sizeof(m_width) + 1];
   uchar *const sbuf_end = net_store_length(sbuf, (size_t)m_width);
   memcpy(current_pos, sbuf, sbuf_end - sbuf);
   current_pos += (sbuf_end - sbuf);
@@ -239,7 +245,7 @@ size_t Rows_event::write_data_body_to_buffer(uchar *buffer) {
 
     if (rows_before.size() != 0) {
       size_t row_bitmap_size = (rows_before.size() + 7) / 8;
-      row_bitmap_before = std::make_unique<uchar[]>(row_bitmap_size);
+      row_bitmap_before      = std::make_unique<uchar[]>(row_bitmap_size);
       memset(row_bitmap_before.get(), 0x00, row_bitmap_size * sizeof(uchar));
     }
 
@@ -263,7 +269,7 @@ size_t Rows_event::write_data_body_to_buffer(uchar *buffer) {
 
     if (rows_after.size() != 0) {
       size_t row_bitmap_size = (rows_after.size() + 7) / 8;
-      row_bitmap_after = std::make_unique<uchar[]>(row_bitmap_size);
+      row_bitmap_after       = std::make_unique<uchar[]>(row_bitmap_size);
       memset(row_bitmap_after.get(), 0x00, row_bitmap_size * sizeof(uchar));
     }
 
@@ -308,4 +314,3 @@ size_t Rows_event::write_data_body_to_buffer(uchar *buffer) {
 
   return current_pos - buffer;
 }
-

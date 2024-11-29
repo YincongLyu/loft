@@ -556,6 +556,9 @@ public:
 
   enum_field_types type() const override { return MYSQL_TYPE_JSON; }
 
+private:
+  int do_save_field_metadata(unsigned char *first_byte) const final;
+
   // 无 pack_length
 };
 

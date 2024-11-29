@@ -231,7 +231,8 @@ cal_status_var:
          ostream->write(pointer_cast<const uchar *>(query_), q_len_);
 }
 
-size_t Query_event::write_data_header_to_buffer(uchar* buffer) {
+size_t Query_event::write_data_header_to_buffer(uchar *buffer)
+{
   // 写入 Query 事件固定头部
   int4store(buffer + Q_THREAD_ID_OFFSET, thread_id_);
   int4store(buffer + Q_EXEC_TIME_OFFSET, query_exec_time_);
@@ -241,9 +242,10 @@ size_t Query_event::write_data_header_to_buffer(uchar* buffer) {
   return AbstractEvent::QUERY_HEADER_LEN;
 }
 
-size_t Query_event::write_data_body_to_buffer(uchar* buffer) {
-  uchar* current_pos = buffer;
-  uchar* start_of_status = current_pos;
+size_t Query_event::write_data_body_to_buffer(uchar *buffer)
+{
+  uchar *current_pos     = buffer;
+  uchar *start_of_status = current_pos;
 
   // 写入状态变量
   if (ddl_xid != INVALID_XID) {
@@ -297,7 +299,7 @@ size_t Query_event::write_data_body_to_buffer(uchar* buffer) {
     if (db_ != nullptr) {
       *current_pos++ = Q_UPDATED_DB_NAMES;
       *current_pos++ = 254;  // 数据库数量
-      strcpy((char*)current_pos, db_);
+      strcpy((char *)current_pos, db_);
       current_pos += strlen(db_) + 1;
     } else {
       *current_pos++ = 254;
@@ -340,24 +342,39 @@ size_t Query_event::write_data_body_to_buffer(uchar* buffer) {
   return current_pos - buffer;
 }
 
-void Query_event::calculate_status_vars_len() {
+void Query_event::calculate_status_vars_len()
+{
   size_t len = 0;
 
   if (ddl_xid != INVALID_XID) {
-    if (flags2_inited) len += 1 + 4;
-    if (sql_mode_inited) len += 1 + 8;
-    if (catalog_len) len += 1 + catalog_len;
-    if (auto_increment_increment != 1 || auto_increment_offset != 1) len += 1 + 4;
-    if (charset_inited) len += 1 + 6;
-    if (time_zone_len) len += 1 + time_zone_len;
-    if (lc_time_names_number) len += 1 + 2;
-    if (charset_database_number) len += 1 + 2;
-    if (table_map_for_update) len += 1 + 8;
-    if (db_) len += 2 + strlen(db_) + 1;
-    else len += 1;
-    if (query_start_usec_used_) len += 1 + 3;
-    if (ddl_xid != INVALID_XID) len += 1 + 8;
-    if (default_collation_for_utf8mb4_number_) len += 1 + 2;
+    if (flags2_inited)
+      len += 1 + 4;
+    if (sql_mode_inited)
+      len += 1 + 8;
+    if (catalog_len)
+      len += 1 + catalog_len;
+    if (auto_increment_increment != 1 || auto_increment_offset != 1)
+      len += 1 + 4;
+    if (charset_inited)
+      len += 1 + 6;
+    if (time_zone_len)
+      len += 1 + time_zone_len;
+    if (lc_time_names_number)
+      len += 1 + 2;
+    if (charset_database_number)
+      len += 1 + 2;
+    if (table_map_for_update)
+      len += 1 + 8;
+    if (db_)
+      len += 2 + strlen(db_) + 1;
+    else
+      len += 1;
+    if (query_start_usec_used_)
+      len += 1 + 3;
+    if (ddl_xid != INVALID_XID)
+      len += 1 + 8;
+    if (default_collation_for_utf8mb4_number_)
+      len += 1 + 2;
   }
 
   status_vars_len_ = len;

@@ -109,7 +109,6 @@ time_t Format_description_event::get_fde_create_time()
   return tv.tv_sec;  // Return time in seconds
 }
 
-
 /**************************************************************************
         Gtid_event methods
 **************************************************************************/
@@ -242,7 +241,8 @@ bool Gtid_event::write_data_body(Basic_ostream *ostream)
 
 bool Gtid_event::write(Basic_ostream *ostream) { return AbstractEvent::write(ostream); }
 
-size_t Gtid_event::write_data_header_to_buffer(uchar *buffer) {
+size_t Gtid_event::write_data_header_to_buffer(uchar *buffer)
+{
   uchar *ptr_buffer = buffer;
 
   // Encode the GTID flags
@@ -264,18 +264,18 @@ size_t Gtid_event::write_data_header_to_buffer(uchar *buffer) {
   ptr_buffer += LOGICAL_TIMESTAMP_TYPECODE_LENGTH;
 
   // Store last committed and sequence number
-  int8store(ptr_buffer, last_committed_);        // 8 bytes
-  int8store(ptr_buffer + 8, sequence_number_);   // 8 bytes
+  int8store(ptr_buffer, last_committed_);       // 8 bytes
+  int8store(ptr_buffer + 8, sequence_number_);  // 8 bytes
   ptr_buffer += LOGICAL_TIMESTAMP_LENGTH;
 
   // Validate the written data matches expected length
   assert(ptr_buffer == (buffer + POST_HEADER_LENGTH));
 
-  return POST_HEADER_LENGTH; // Total header length
+  return POST_HEADER_LENGTH;  // Total header length
 }
 
-
-size_t Gtid_event::write_data_body_to_buffer(uchar *buffer) {
+size_t Gtid_event::write_data_body_to_buffer(uchar *buffer)
+{
   uchar *ptr_buffer = buffer;
 
   // Immediate commit timestamp with flag
@@ -296,7 +296,7 @@ size_t Gtid_event::write_data_body_to_buffer(uchar *buffer) {
 
   // Transaction length
   uchar *ptr_after_length = net_store_length(ptr_buffer, transaction_length_);
-  ptr_buffer = ptr_after_length;
+  ptr_buffer              = ptr_after_length;
 
   // Immediate server version with flag
   uint32_t immediate_server_version_with_flag = immediate_server_version_;
@@ -318,7 +318,6 @@ size_t Gtid_event::write_data_body_to_buffer(uchar *buffer) {
   return ptr_buffer - buffer;
 }
 
-
 Gtid_event::~Gtid_event() = default;
 
 /**************************************************************************
@@ -339,7 +338,8 @@ bool Xid_event::write(Basic_ostream *ostream)
 }
 
 size_t Xid_event::write_data_header_to_buffer(uchar *buffer) { return XID_HEADER_LEN; }
-size_t Xid_event::write_data_body_to_buffer(uchar *buffer) {
+size_t Xid_event::write_data_body_to_buffer(uchar *buffer)
+{
   memcpy(buffer, (uchar *)&xid_, sizeof(xid_));
   return sizeof(xid_);
 }
@@ -373,19 +373,18 @@ bool Rotate_event::write(Basic_ostream *ostream)
          ostream->write(pointer_cast<const uchar *>(new_log_ident_.c_str()), (uint)ident_len_);
 }
 
-size_t Rotate_event::write_data_header_to_buffer(uchar *buf) {
+size_t Rotate_event::write_data_header_to_buffer(uchar *buf)
+{
   // 写入位置信息
   int8store(buf + R_POS_OFFSET, pos_);
   return ROTATE_HEADER_LEN;
 }
 
-size_t Rotate_event::write_data_body_to_buffer(uchar* buffer) {
+size_t Rotate_event::write_data_body_to_buffer(uchar *buffer)
+{
 
   // 写入新日志标识
-  memcpy(buffer,
-      pointer_cast<const uchar*>(new_log_ident_.c_str()),
-      ident_len_);
+  memcpy(buffer, pointer_cast<const uchar *>(new_log_ident_.c_str()), ident_len_);
 
   return ident_len_;
 }
-

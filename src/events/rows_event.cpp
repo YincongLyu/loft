@@ -226,7 +226,7 @@ size_t Table_map_event::write_data_body_to_buffer(uchar *buffer)
 
   // 写入数据库名长度
   uchar *const dbuf_end = net_store_length(current_pos, (size_t)m_dblen_);
-  current_pos = dbuf_end;
+  current_pos           = dbuf_end;
 
   // 写入数据库名
   memcpy(current_pos, m_dbnam_.c_str(), m_dblen_ + 1);
@@ -234,7 +234,7 @@ size_t Table_map_event::write_data_body_to_buffer(uchar *buffer)
 
   // 写入表名长度
   uchar *const tbuf_end = net_store_length(current_pos, (size_t)m_tbllen_);
-  current_pos = tbuf_end;
+  current_pos           = tbuf_end;
 
   // 写入表名
   memcpy(current_pos, m_tblnam_.c_str(), m_tbllen_ + 1);
@@ -242,7 +242,7 @@ size_t Table_map_event::write_data_body_to_buffer(uchar *buffer)
 
   // 写入列数
   uchar *const cbuf_end = net_store_length(current_pos, (size_t)m_colcnt_);
-  current_pos = cbuf_end;
+  current_pos           = cbuf_end;
 
   // 写入列类型
   memcpy(current_pos, m_coltype_.get(), m_colcnt_);
@@ -250,7 +250,7 @@ size_t Table_map_event::write_data_body_to_buffer(uchar *buffer)
 
   // 写入字段元数据大小
   uchar *const mbuf_end = net_store_length(current_pos, m_field_metadata_size_);
-  current_pos = mbuf_end;
+  current_pos           = mbuf_end;
 
   // 写入字段元数据
   memcpy(current_pos, m_field_metadata_.get(), m_field_metadata_size_);

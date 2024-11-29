@@ -1,5 +1,5 @@
 //
-// Created by Coonger on 2024/11/6.
+// Created by Takenzz on 2024/11/6.
 //
 
 #pragma once
@@ -13,6 +13,8 @@
 static const int  dig2bytes[DIG_PER_DEC1 + 1] = {0, 1, 1, 2, 2, 3, 3, 4, 4, 4};
 static const dec1 powers10[DIG_PER_DEC1 + 1]  = {
     1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000};
+
+#define DECIMAL_MAX_FIELD_SIZE 65
 
 struct decimal_t
 {

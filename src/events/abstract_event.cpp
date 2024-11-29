@@ -20,7 +20,7 @@ uint32 AbstractEvent::write_common_header_to_memory(uchar *buf)
   // TODO 暂时用系统时间，填充 实际上是数据源 commit time 去掉微秒转化成 ts类型，和写 log_pos 一样是在 制作完后续的
   // event data body 写完才确定的时间
   //  int4store(buf, 1730311658);
-  int4store(buf, common_header_->timestamp_); // 不算微秒
+  int4store(buf, common_header_->timestamp_);  // 不算微秒
   buf[EVENT_TYPE_OFFSET] = type_code_;
   int4store(buf + SERVER_ID_OFFSET, SERVER_ID);
   int4store(buf + EVENT_LEN_OFFSET, static_cast<uint32_t>(common_header_->data_written_));
@@ -48,7 +48,8 @@ bool AbstractEvent::write_common_header(Basic_ostream *ostream, size_t event_dat
   return ostream->write(header, LOG_EVENT_HEADER_LEN);
 }
 
-size_t AbstractEvent::write_common_header_to_buffer(uchar* buffer) {
+size_t AbstractEvent::write_common_header_to_buffer(uchar *buffer)
+{
   common_header_->data_written_ = LOG_EVENT_HEADER_LEN + get_data_size();
   // 先用占位符填充 log_pos_
   common_header_->log_pos_ = POSITION_PLACEHOLDER;

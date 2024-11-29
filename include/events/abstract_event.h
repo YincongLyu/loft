@@ -226,8 +226,9 @@ public:
   {
     return write_common_header(ostream, get_data_size()) && write_data_header(ostream) && write_data_body(ostream);
   }
-// 改造 write 的逻辑：写入到 buffer 中，返回写入的字节数
-  virtual size_t write_to_buffer(uchar* buffer) {
+  // 改造 write 的逻辑：写入到 buffer 中，返回写入的字节数
+  virtual size_t write_to_buffer(uchar *buffer)
+  {
     size_t pos = 0;
 
     // 写入通用头部
@@ -235,20 +236,16 @@ public:
     // 写入数据头部
     pos += write_data_header_to_buffer(buffer + pos);
     // 写入数据
-    pos += write_data_body_to_buffer(buffer + pos); // FIXME 问题都是发生在 wrtie_body
+    pos += write_data_body_to_buffer(buffer + pos);  // FIXME 问题都是发生在 wrtie_body
 
     return pos;
   }
+
 protected:
   static const uint32_t POSITION_PLACEHOLDER = 0;
-  virtual size_t write_common_header_to_buffer(uchar* buffer);
-  virtual size_t write_data_header_to_buffer(uchar* buffer) {
-    return 0;
-  }
-  virtual size_t write_data_body_to_buffer(uchar* buffer) {
-    return 0;
-  }
-
+  virtual size_t        write_common_header_to_buffer(uchar *buffer);
+  virtual size_t        write_data_header_to_buffer(uchar *buffer) { return 0; }
+  virtual size_t        write_data_body_to_buffer(uchar *buffer) { return 0; }
 
   time_t get_common_header_time();
 

@@ -19,31 +19,6 @@ inline uint my_decimal_length_to_precision(uint length, uint scale, bool unsigne
   return retval;
 }
 
-/*
-  Returns the size of array to hold a binary representation of a decimal
-
-RETURN VALUE size in bytes
-*/
-inline static int decimal_bin_size_inline(int precision, int scale)
-{
-  int intg = precision - scale, intg0 = intg / DIG_PER_DEC1, frac0 = scale / DIG_PER_DEC1,
-      intg0x = intg - intg0 * DIG_PER_DEC1, frac0x = scale - frac0 * DIG_PER_DEC1;
-
-  assert(scale >= 0 && precision > 0 && scale <= precision);
-  assert(intg0x >= 0);
-  assert(intg0x <= DIG_PER_DEC1);
-  assert(frac0x >= 0);
-  assert(frac0x <= DIG_PER_DEC1);
-  return intg0 * sizeof(dec1) + dig2bytes[intg0x] + frac0 * sizeof(dec1) + dig2bytes[frac0x];
-}
-
-int decimal_bin_size(int precision, int scale) { return decimal_bin_size_inline(precision, scale); }
-
-inline int my_decimal_get_binary_size(uint precision, uint scale)
-{
-  return decimal_bin_size((int)precision, (int)scale);
-}
-
 /// This is used as a table name when the table structure is not set up
 Field::Field(uint32 length_arg, bool is_nullable_arg, unsigned char null_bit_arg, const char *field_name_arg)
     : field_name(field_name_arg), m_null(is_nullable_arg), field_length(length_arg)
@@ -156,6 +131,12 @@ int Field_blob::do_save_field_metadata(unsigned char *metadata_ptr) const
 {
   *metadata_ptr = pack_length_no_ptr();
   LOG_INFO("metadata: %u (pack_length_no_ptr)", *metadata_ptr);
+  return 1;
+}
+
+int Field_json::do_save_field_metadata(unsigned char *metadata_ptr) const
+{
+  *metadata_ptr = 4;
   return 1;
 }
 
@@ -416,4 +397,5 @@ unsigned int my_timestamp_binary_length(unsigned int dec)
   LOFT_ASSERT(dec <= DATETIME_MAX_DECIMALS, "timestamp dec is toolarge");
   return 4 + (dec + 1) / 2;
 }
+
 }  // namespace mysql
